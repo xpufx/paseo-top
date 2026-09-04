@@ -40,6 +40,15 @@ declare module "@getpaseo/plugin/react-native" {
 
 declare module "@getpaseo/plugin/server" {
   import type { PaseoApi } from "@getpaseo/client";
+
+  export interface PluginHandlerContext {
+    paseo: PaseoApi;
+  }
+}
+
+declare module "@getpaseo/plugin" {
+  import type { ComponentType } from "react";
+  import type { PaseoApi } from "@getpaseo/client";
   import type { ZodType, input as ZodInput, output as ZodOutput } from "zod";
 
   export interface PluginRpcContract<
@@ -51,6 +60,9 @@ declare module "@getpaseo/plugin/server" {
     output: OutputSchema;
   }
 
+  export type RpcInput<Contract extends PluginRpcContract> = ZodOutput<Contract["input"]>;
+  export type RpcOutput<Contract extends PluginRpcContract> = ZodInput<Contract["output"]>;
+
   export function defineRpc<InputSchema extends ZodType, OutputSchema extends ZodType>(
     contract: PluginRpcContract<InputSchema, OutputSchema>,
   ): PluginRpcContract<InputSchema, OutputSchema>;
@@ -58,22 +70,6 @@ declare module "@getpaseo/plugin/server" {
   export interface PluginHandlerContext {
     paseo: PaseoApi;
   }
-}
-
-declare module "@getpaseo/plugin" {
-  import type { ComponentType } from "react";
-  import type { PaseoApi } from "@getpaseo/client";
-  import type { ZodType, input as ZodInput, output as ZodOutput } from "zod";
-  import type {
-    PluginHandlerContext,
-    PluginRpcContract,
-  } from "@getpaseo/plugin/server";
-
-  export {
-    defineRpc,
-    type PluginHandlerContext,
-    type PluginRpcContract,
-  } from "@getpaseo/plugin/server";
 
   export interface PluginTheme {
     readonly colors: {
@@ -150,7 +146,8 @@ declare module "@getpaseo/plugin" {
     addComposerPill(contribution: PluginComposerPillContribution): PluginCleanup;
   }
   export type PluginClientContribution = (client: PluginClientContext) => PluginCleanup;
-  export interface PluginContext {
+
+  export interface PluginServerContext {
     handle<InputSchema extends ZodType, OutputSchema extends ZodType>(
       contract: PluginRpcContract<InputSchema, OutputSchema>,
       handler: (
@@ -158,8 +155,8 @@ declare module "@getpaseo/plugin" {
         context: PluginHandlerContext,
       ) => ZodInput<OutputSchema> | Promise<ZodInput<OutputSchema>>,
     ): void;
-    addSurface(id: string, Component: ComponentType<PluginSurfaceProps>): void;
-    addClientSide(contribution: PluginClientContribution): void;
   }
+  export type PluginServerContribution = (server: PluginServerContext) => PluginCleanup;
+
   export type PluginCleanup = () => void | Promise<void>;
 }

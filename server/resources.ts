@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
-import type { SystemResources } from "./resources.shared";
+import type { SystemResources } from "../shared/resources";
 
 interface CpuSnapshot {
   idle: number;

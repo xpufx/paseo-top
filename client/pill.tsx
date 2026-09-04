@@ -6,7 +6,7 @@ import {
   type PluginComposerPillProps,
 } from "@getpaseo/plugin";
 import { Icon, Modal } from "@getpaseo/plugin/react-native";
-import { getSystemResourcesRpc, type SystemResources } from "./resources.shared";
+import { getSystemResourcesRpc, type SystemResources } from "../shared/resources";
 
 const openers = new Map<string, () => void>();
 

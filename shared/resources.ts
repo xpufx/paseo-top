@@ -1,4 +1,4 @@
-import { defineRpc } from "@getpaseo/plugin/server";
+import { defineRpc, type RpcOutput } from "@getpaseo/plugin";
 import { z } from "zod";
 
 export const getSystemResourcesRpc = defineRpc({
@@ -19,4 +19,4 @@ export const getSystemResourcesRpc = defineRpc({
   }),
 });
 
-export type SystemResources = z.output<typeof getSystemResourcesRpc.output>;
+export type SystemResources = RpcOutput<typeof getSystemResourcesRpc>;
