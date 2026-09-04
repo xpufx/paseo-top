@@ -10,6 +10,8 @@ Live host system resource monitor for [Paseo](https://github.com/getpaseo/paseo)
 
 Displays real-time CPU and memory metrics right in the composer track bar without cluttering the screen, with a full-detail native modal available on click.
 
+Built with [`paseo-plugin-helper`](https://github.com/xpufx/paseo-plugin-helper) for native UI primitives (`Card`, `ProgressBar`, `KeyValueGroup`), structured logging, and typed RPC contracts.
+
 ## Features
 
 - **Composer Pill**: Unobtrusive widget in the track bar directly above the agent prompt input.
