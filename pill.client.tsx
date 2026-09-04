@@ -295,15 +295,12 @@ function ResourcePill({ theme, agentId }: PluginComposerPillProps) {
 
     if (!data) {
       return (
-        <>
-          <Icon name="Activity" size={12} color={theme.colors.foregroundMuted} />
-          <Text
-            numberOfLines={1}
-            style={{ color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 }}
-          >
-            top…
-          </Text>
-        </>
+        <Text
+          numberOfLines={1}
+          style={{ color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 }}
+        >
+          top…
+        </Text>
       );
     }
 
@@ -321,27 +318,17 @@ function ResourcePill({ theme, agentId }: PluginComposerPillProps) {
         ? theme.colors.statusWarning
         : theme.colors.statusSuccess;
 
-    const iconColor =
-      data.cpuUsagePercent >= 85 || data.memoryUsedPercent >= 85
-        ? theme.colors.statusDanger
-        : data.cpuUsagePercent >= 60 || data.memoryUsedPercent >= 70
-        ? theme.colors.statusWarning
-        : theme.colors.statusSuccess;
-
     const ramGb = (data.memoryUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
 
     return (
-      <>
-        <Icon name="Activity" size={13} color={iconColor} />
-        <Text
-          numberOfLines={1}
-          style={{ fontSize: 11, flexShrink: 1 }}
-        >
-          <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
-          <Text style={{ color: theme.colors.foregroundMuted }}>{" · "}</Text>
-          <Text style={{ color: memColor, fontWeight: "600" }}>{`${ramGb}G`}</Text>
-        </Text>
-      </>
+      <Text
+        numberOfLines={1}
+        style={{ fontSize: 11, flexShrink: 1 }}
+      >
+        <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
+        <Text style={{ color: theme.colors.foregroundMuted }}>{" · "}</Text>
+        <Text style={{ color: memColor, fontWeight: "600" }}>{`${ramGb}G`}</Text>
+      </Text>
     );
   }, [data, hasError, theme.colors]);
 
