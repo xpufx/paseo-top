@@ -1,8 +1,9 @@
-import { defineRpc } from "@getpaseo/plugin/server";
+import { defineContract, type RpcOutput } from "paseo-plugin-helper/shared";
 import { z } from "zod";
 
-export const getSystemResourcesRpc = defineRpc({
+export const getSystemResourcesRpc = defineContract({
   name: "system-resources.get",
+  description: "Retrieve real-time host system resource metrics (CPU, RAM, load, uptime)",
   input: z.object({}),
   output: z.object({
     hostname: z.string(),
@@ -19,4 +20,4 @@ export const getSystemResourcesRpc = defineRpc({
   }),
 });
 
-export type SystemResources = z.output<typeof getSystemResourcesRpc.output>;
+export type SystemResources = RpcOutput<typeof getSystemResourcesRpc>;

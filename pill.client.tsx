@@ -1,184 +1,143 @@
-import { useEffect, useMemo, useState } from "react";
+import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import type { PluginClientContext, PluginComposerPillProps } from "@getpaseo/plugin";
+import { Icon } from "@getpaseo/plugin/react-native";
 import {
-  useRpc,
-  type PluginClientContext,
-  type PluginComposerPillProps,
-} from "@getpaseo/plugin";
-import { Icon, Modal } from "@getpaseo/plugin/react-native";
+  registerComposerPill,
+  ModalBody,
+  Card,
+  KeyValue,
+  ProgressBar,
+  useRpcQuery,
+  usePluginTheme,
+  type RenderModalProps,
+} from "paseo-plugin-helper/client";
+import { formatBytes, formatUptime } from "paseo-plugin-helper/shared";
 import { getSystemResourcesRpc, type SystemResources } from "./resources.shared";
 
-const openers = new Map<string, () => void>();
+const EMPTY_PARAMS = {};
 
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
-function formatBytes(bytes: number): string {
-  const gb = bytes / (1024 * 1024 * 1024);
-  return `${gb.toFixed(1)} GB`;
-}
-
-function ProgressBar({
-  value,
-  color,
-  bgColor,
-}: {
-  value: number;
-  color: string;
-  bgColor: string;
-}) {
-  const clamped = Math.max(0, Math.min(100, value));
-  return (
-    <View style={[styles.progressTrack, { backgroundColor: bgColor }]}>
-      <View
-        style={[
-          styles.progressBar,
-          { width: `${clamped}%`, backgroundColor: color },
-        ]}
-      />
-    </View>
-  );
-}
-
-function ResourceModalContent({
-  theme,
-  initialData,
-}: {
-  theme: PluginComposerPillProps["theme"];
-  initialData: SystemResources | null;
-}) {
-  const fetchResources = useRpc(getSystemResourcesRpc);
-  const [data, setData] = useState<SystemResources | null>(initialData);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const update = async () => {
-      try {
-        const res = await fetchResources({});
-        if (mounted) {
-          setData(res);
-          setError(null);
-        }
-      } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : "Failed to load metrics");
-        }
-      }
-    };
-
-    update();
-    const interval = setInterval(update, 1500);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [fetchResources]);
-
-  if (error && !data) {
-    return (
-      <View style={styles.modalContent}>
-        <View style={styles.errorBox}>
-          <Icon name="Ghost" size={24} color={theme.colors.statusDanger} />
-          <Text style={[styles.errorText, { color: theme.colors.statusDanger }]}>
-            {error}
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
+function getMetricColors(
+  data: SystemResources | undefined,
+  colors: ReturnType<typeof usePluginTheme>["colors"],
+) {
   if (!data) {
-    return (
-      <View style={styles.modalContent}>
-        <Text style={{ color: theme.colors.foregroundMuted }}>Loading system metrics…</Text>
-      </View>
-    );
+    return {
+      cpuColor: colors.foregroundMuted,
+      memColor: colors.foregroundMuted,
+    };
   }
 
   const cpuColor =
-    data.cpuUsagePercent > 85
-      ? theme.colors.statusDanger
-      : data.cpuUsagePercent > 65
-      ? theme.colors.statusWarning
-      : theme.colors.statusSuccess;
+    data.cpuUsagePercent >= 85
+      ? colors.statusDanger
+      : data.cpuUsagePercent >= 60
+      ? colors.statusWarning
+      : colors.statusSuccess;
 
   const memColor =
-    data.memoryUsedPercent > 85
-      ? theme.colors.statusDanger
-      : data.memoryUsedPercent > 70
-      ? theme.colors.statusWarning
-      : theme.colors.accent;
+    data.memoryUsedPercent >= 85
+      ? colors.statusDanger
+      : data.memoryUsedPercent >= 70
+      ? colors.statusWarning
+      : colors.statusSuccess;
+
+  return { cpuColor, memColor };
+}
+
+function PillView({ theme }: PluginComposerPillProps) {
+  const { colors } = usePluginTheme();
+  const { data, isError, isLoading } = useRpcQuery(
+    getSystemResourcesRpc,
+    EMPTY_PARAMS,
+    {
+      refetchInterval: 3000,
+    },
+  );
+
+  if (isError) {
+    return (
+      <View style={styles.pillContainer}>
+        <Icon name="Ghost" size={13} color={colors.statusDanger} />
+        <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+          Offline
+        </Text>
+      </View>
+    );
+  }
+
+  if (isLoading || !data) {
+    return (
+      <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+        top…
+      </Text>
+    );
+  }
+
+  const { cpuColor, memColor } = getMetricColors(data, colors);
+  const ramGb = (data.memoryUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
 
   return (
-    <View style={styles.modalContent}>
-      {/* Host Meta Banner */}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.colors.surface1,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
-        <View style={styles.metaRow}>
-          <View style={styles.metaCol}>
-            <Text style={[styles.metaLabel, { color: theme.colors.foregroundMuted }]}>
-              Host
-            </Text>
-            <Text
-              style={[styles.metaValue, { color: theme.colors.foreground }]}
-              numberOfLines={1}
-            >
-              {data.hostname}
-            </Text>
-          </View>
-          <View style={styles.metaCol}>
-            <Text style={[styles.metaLabel, { color: theme.colors.foregroundMuted }]}>
-              Uptime
-            </Text>
-            <Text style={[styles.metaValue, { color: theme.colors.foreground }]}>
-              {formatUptime(data.uptimeSeconds)}
-            </Text>
-          </View>
-        </View>
+    <Text numberOfLines={1} style={styles.pillText}>
+      <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
+      <Text style={{ color: colors.foregroundMuted }}>{" · "}</Text>
+      <Text style={{ color: memColor, fontWeight: "600" }}>{`${ramGb}G`}</Text>
+    </Text>
+  );
+}
 
-        <View style={[styles.metaRow, { marginTop: 8 }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.metaLabel, { color: theme.colors.foregroundMuted }]}>
-              Processor
-            </Text>
-            <Text
-              style={[styles.metaSubValue, { color: theme.colors.foreground }]}
-              numberOfLines={1}
-            >
-              {data.cpuModel} ({data.cpuCores} cores)
+function ResourceModal({ theme }: RenderModalProps) {
+  const { colors } = usePluginTheme();
+  const { data, isError, error, isLoading } = useRpcQuery(
+    getSystemResourcesRpc,
+    EMPTY_PARAMS,
+    {
+      refetchInterval: 1500,
+    },
+  );
+
+  if (isError && !data) {
+    return (
+      <ModalBody>
+        <Card variant="elevated">
+          <View style={styles.errorBox}>
+            <Icon name="Ghost" size={24} color={colors.statusDanger} />
+            <Text style={[styles.errorText, { color: colors.statusDanger }]}>
+              {error instanceof Error ? error.message : "Failed to load metrics"}
             </Text>
           </View>
-        </View>
-      </View>
+        </Card>
+      </ModalBody>
+    );
+  }
 
-      {/* CPU Section */}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.colors.surface1,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
+  if (isLoading || !data) {
+    return (
+      <ModalBody>
+        <Text style={{ color: colors.foregroundMuted }}>Loading system metrics…</Text>
+      </ModalBody>
+    );
+  }
+
+  const { cpuColor, memColor } = getMetricColors(data, colors);
+
+  return (
+    <ModalBody>
+      {/* Host Meta Card */}
+      <Card variant="elevated">
+        <KeyValue label="Host" value={data.hostname} copyable />
+        <KeyValue label="Uptime" value={formatUptime(data.uptimeSeconds)} />
+        <KeyValue
+          label="Processor"
+          value={data.cpuModel}
+          subValue={`(${data.cpuCores} cores)`}
+        />
+      </Card>
+
+      {/* CPU Utilization Card */}
+      <Card variant="elevated">
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
             CPU Utilization
           </Text>
           <Text style={[styles.metricHighlight, { color: cpuColor }]}>
@@ -189,31 +148,20 @@ function ResourceModalContent({
         <ProgressBar
           value={data.cpuUsagePercent}
           color={cpuColor}
-          bgColor={theme.colors.surface2}
+          height={8}
         />
 
-        <View style={styles.subStatsRow}>
-          <Text style={[styles.subStatLabel, { color: theme.colors.foregroundMuted }]}>
-            Load average (1m, 5m, 15m):
-          </Text>
-          <Text style={[styles.subStatValue, { color: theme.colors.foreground }]}>
-            {data.loadAvg.map((n) => n.toFixed(2)).join("  ")}
-          </Text>
-        </View>
-      </View>
+        <KeyValue
+          label="Load Average (1m, 5m, 15m)"
+          value={data.loadAvg.map((n) => n.toFixed(2)).join("  ")}
+          mono
+        />
+      </Card>
 
-      {/* Memory Section */}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.colors.surface1,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
+      {/* Memory Card */}
+      <Card variant="elevated">
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
             Memory
           </Text>
           <Text style={[styles.metricHighlight, { color: memColor }]}>
@@ -224,212 +172,36 @@ function ResourceModalContent({
         <ProgressBar
           value={data.memoryUsedPercent}
           color={memColor}
-          bgColor={theme.colors.surface2}
+          height={8}
         />
 
-        <View style={styles.subStatsRow}>
-          <Text style={[styles.subStatLabel, { color: theme.colors.foregroundMuted }]}>
-            Used / Total:
-          </Text>
-          <Text style={[styles.subStatValue, { color: theme.colors.foreground }]}>
-            {formatBytes(data.memoryUsedBytes)} / {formatBytes(data.memoryTotalBytes)}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function ResourcePill({ theme, agentId }: PluginComposerPillProps) {
-  const fetchResources = useRpc(getSystemResourcesRpc);
-  const [data, setData] = useState<SystemResources | null>(null);
-  const [hasError, setHasError] = useState(false);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    openers.set(agentId, () => setOpen(true));
-    return () => {
-      openers.delete(agentId);
-    };
-  }, [agentId]);
-
-  useEffect(() => {
-    let active = true;
-
-    const poll = async () => {
-      try {
-        const res = await fetchResources({});
-        if (active) {
-          setData(res);
-          setHasError(false);
-        }
-      } catch {
-        if (active) {
-          setHasError(true);
-        }
-      }
-    };
-
-    poll();
-    const timer = setInterval(poll, 3000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [fetchResources]);
-
-  const pillContent = useMemo(() => {
-    if (hasError) {
-      return (
-        <>
-          <Icon name="Ghost" size={13} color={theme.colors.statusDanger} />
-          <Text
-            numberOfLines={1}
-            style={{ color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 }}
-          >
-            Offline
-          </Text>
-        </>
-      );
-    }
-
-    if (!data) {
-      return (
-        <Text
-          numberOfLines={1}
-          style={{ color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 }}
-        >
-          top…
-        </Text>
-      );
-    }
-
-    const cpuColor =
-      data.cpuUsagePercent >= 85
-        ? theme.colors.statusDanger
-        : data.cpuUsagePercent >= 60
-        ? theme.colors.statusWarning
-        : theme.colors.statusSuccess;
-
-    const memColor =
-      data.memoryUsedPercent >= 85
-        ? theme.colors.statusDanger
-        : data.memoryUsedPercent >= 70
-        ? theme.colors.statusWarning
-        : theme.colors.statusSuccess;
-
-    const ramGb = (data.memoryUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
-
-    return (
-      <Text
-        numberOfLines={1}
-        style={{ fontSize: 11, flexShrink: 1 }}
-      >
-        <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
-        <Text style={{ color: theme.colors.foregroundMuted }}>{" · "}</Text>
-        <Text style={{ color: memColor, fontWeight: "600" }}>{`${ramGb}G`}</Text>
-      </Text>
-    );
-  }, [data, hasError, theme.colors]);
-
-  return (
-    <>
-      {pillContent}
-      <Modal
-        title="Host System Resources"
-        icon={<Icon name="Activity" size={18} color={theme.colors.foreground} />}
-        open={open}
-        onOpenChange={setOpen}
-      >
-        <Modal.Content>
-          <ResourceModalContent theme={theme} initialData={data} />
-        </Modal.Content>
-      </Modal>
-    </>
+        <KeyValue
+          label="Used / Total"
+          value={`${formatBytes(data.memoryUsedBytes)} / ${formatBytes(data.memoryTotalBytes)}`}
+        />
+      </Card>
+    </ModalBody>
   );
 }
 
 export function contributeClient(client: PluginClientContext) {
-  const pills = new Map<string, () => void>();
-
-  function addPill(agentId: string, workspaceId: string) {
-    if (pills.has(agentId)) return;
-    pills.set(
-      agentId,
-      client.addComposerPill({
-        id: "paseo-top",
-        title: "System Resources",
-        workspaceId,
-        agentId,
-        Component: ResourcePill,
-        onPress() {
-          const opener = openers.get(agentId);
-          if (opener) opener();
-        },
-      }),
-    );
-  }
-
-  function removePill(agentId: string) {
-    pills.get(agentId)?.();
-    pills.delete(agentId);
-    openers.delete(agentId);
-  }
-
-  const unsubscribe = client.paseo.agents.subscribe((update) => {
-    if (update.kind === "remove") {
-      removePill(update.agentId);
-      return;
-    }
-    const { id, workspaceId } = update.agent;
-    if (workspaceId) addPill(id, workspaceId);
+  return registerComposerPill(client, {
+    id: "paseo-top",
+    title: "Host System Resources",
+    renderPill: (props) => <PillView {...props} />,
+    renderModal: (props) => <ResourceModal {...props} />,
   });
-
-  client.paseo.agents
-    .list()
-    .then((result) => {
-      result.entries.forEach(({ agent }) => {
-        if (agent.workspaceId) addPill(agent.id, agent.workspaceId);
-      });
-    })
-    .catch((err) => console.error("paseo-top: seed pills failed", err));
-
-  return () => {
-    unsubscribe();
-    pills.forEach((remove) => remove());
-    pills.clear();
-    openers.clear();
-  };
 }
 
 const styles = StyleSheet.create({
-  modalContent: {
-    padding: 16,
-    gap: 12,
-  },
-  card: {
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 12,
-  },
-  metaRow: {
+  pillContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 4,
   },
-  metaCol: {
-    flex: 1,
-  },
-  metaLabel: {
+  pillText: {
     fontSize: 11,
-    marginBottom: 2,
-    textTransform: "uppercase",
-  },
-  metaValue: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  metaSubValue: {
-    fontSize: 12,
+    flexShrink: 1,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -444,29 +216,6 @@ const styles = StyleSheet.create({
   metricHighlight: {
     fontSize: 15,
     fontWeight: "700",
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 4,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  progressBar: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  subStatsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 2,
-  },
-  subStatLabel: {
-    fontSize: 11,
-  },
-  subStatValue: {
-    fontSize: 11,
-    fontWeight: "500",
   },
   errorBox: {
     padding: 24,

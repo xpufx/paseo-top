@@ -13,5 +13,8 @@
     "react-native": "0.81.5",
     "typescript": "^5.9.3",
     "zod": "^4.4.3"
+  },
+  "dependencies": {
+    "paseo-plugin-helper": "file:../../../../code/paseo-plugin-helper"
   }
 }
