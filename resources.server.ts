@@ -7,8 +7,8 @@ import {
 } from "paseo-plugin-helper/server";
 import type { SystemResources } from "./resources.shared";
 
-export const log = createPluginLogger("top");
-const pluginVersion = resolvePluginVersion();
+const pluginVersion = resolvePluginVersion({ cwd: import.meta.dirname });
+export const log = createPluginLogger("top", { version: pluginVersion });
 
 log.info("Initialized host system resources monitor", { version: pluginVersion });
 
