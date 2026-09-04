@@ -185,6 +185,13 @@ function ResourceModal({ theme }: RenderModalProps) {
           value={`${formatBytes(data.memoryUsedBytes)} / ${formatBytes(data.memoryTotalBytes)}`}
         />
       </Card>
+
+      {/* Discrete Version Footer */}
+      <View style={styles.footer}>
+        <Text style={[styles.footerText, { color: colors.foregroundMuted }]}>
+          top v{data.version}
+        </Text>
+      </View>
     </ModalBody>
   );
 }
@@ -216,6 +223,16 @@ const styles = StyleSheet.create({
   metricHighlight: {
     fontSize: 14,
     fontWeight: "700",
+  },
+  footer: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  footerText: {
+    fontSize: 10,
+    opacity: 0.65,
+    fontFamily: "monospace",
   },
   errorBox: {
     padding: 24,

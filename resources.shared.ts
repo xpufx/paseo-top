@@ -6,6 +6,7 @@ export const getSystemResourcesRpc = defineContract({
   description: "Retrieve real-time host system resource metrics (CPU, RAM, load, uptime)",
   input: z.object({}),
   output: z.object({
+    version: z.string(),
     hostname: z.string(),
     platform: z.string(),
     arch: z.string(),

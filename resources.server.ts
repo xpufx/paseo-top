@@ -1,7 +1,16 @@
 import fs from "node:fs";
 import os from "node:os";
-import { getSystemMetrics } from "paseo-plugin-helper/server";
+import {
+  getSystemMetrics,
+  resolvePluginVersion,
+  createPluginLogger,
+} from "paseo-plugin-helper/server";
 import type { SystemResources } from "./resources.shared";
+
+export const log = createPluginLogger("top");
+const pluginVersion = resolvePluginVersion();
+
+log.info("Initialized host system resources monitor", { version: pluginVersion });
 
 export async function handleGetSystemResources(): Promise<SystemResources> {
   const metrics = getSystemMetrics();
@@ -24,7 +33,12 @@ export async function handleGetSystemResources(): Promise<SystemResources> {
     }
   }
 
+  if (memoryUsedPercent >= 90) {
+    log.warn("Memory threshold critical", { usedPercent: memoryUsedPercent });
+  }
+
   return {
+    version: pluginVersion,
     hostname: metrics.hostname,
     platform: `${os.type()} ${os.release()}`,
     arch: metrics.arch,
