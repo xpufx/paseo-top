@@ -22,6 +22,7 @@ import {
   type MetricThresholds,
 } from "paseo-plugin-helper/shared";
 import { getSystemResourcesRpc, type SystemResources } from "./resources.shared";
+import { PLUGIN_VERSION } from "./version";
 
 const EMPTY_PARAMS = {};
 
@@ -189,7 +190,7 @@ function ResourceModal({ theme }: RenderModalProps) {
       {/* Discrete Version Footer */}
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: colors.foregroundMuted }]}>
-          top v{data.version}
+          top v{data?.version ?? PLUGIN_VERSION}
         </Text>
       </View>
     </ModalBody>

@@ -2,15 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import {
   getSystemMetrics,
-  resolvePluginVersion,
   createPluginLogger,
 } from "paseo-plugin-helper/server";
 import type { SystemResources } from "./resources.shared";
+import { PLUGIN_VERSION } from "./version";
 
-const pluginVersion = resolvePluginVersion({ cwd: import.meta.dirname });
-export const log = createPluginLogger("top", { version: pluginVersion });
+export const log = createPluginLogger("top", { version: PLUGIN_VERSION });
 
-log.info("Initialized host system resources monitor", { version: pluginVersion });
+log.info("Initialized host system resources monitor", { version: PLUGIN_VERSION });
 
 export async function handleGetSystemResources(): Promise<SystemResources> {
   const metrics = getSystemMetrics();
@@ -38,7 +37,7 @@ export async function handleGetSystemResources(): Promise<SystemResources> {
   }
 
   return {
-    version: pluginVersion,
+    version: PLUGIN_VERSION,
     hostname: metrics.hostname,
     platform: `${os.type()} ${os.release()}`,
     arch: metrics.arch,
