@@ -1,21 +1,32 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import type { PluginClientContext, PluginComposerPillProps } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin/react-native";
+import type { PluginClientContext } from "@getpaseo/plugin";
 import {
   registerComposerPill,
   ModalBody,
   Card,
   KeyValue,
+  KeyValueGroup,
   ProgressBar,
+  Icon,
   useRpcQuery,
   usePluginTheme,
+  getStatusColor,
   type RenderModalProps,
+  type RenderPillProps,
 } from "paseo-plugin-helper/client";
-import { formatBytes, formatUptime } from "paseo-plugin-helper/shared";
+import {
+  formatBytes,
+  formatUptime,
+  resolveMetricStatus,
+  type MetricThresholds,
+} from "paseo-plugin-helper/shared";
 import { getSystemResourcesRpc, type SystemResources } from "./resources.shared";
 
 const EMPTY_PARAMS = {};
+
+const CPU_THRESHOLDS: MetricThresholds = { warning: 60, danger: 85 };
+const MEM_THRESHOLDS: MetricThresholds = { warning: 70, danger: 85 };
 
 function getMetricColors(
   data: SystemResources | undefined,
@@ -28,24 +39,16 @@ function getMetricColors(
     };
   }
 
-  const cpuColor =
-    data.cpuUsagePercent >= 85
-      ? colors.statusDanger
-      : data.cpuUsagePercent >= 60
-      ? colors.statusWarning
-      : colors.statusSuccess;
+  const cpuStatus = resolveMetricStatus(data.cpuUsagePercent, CPU_THRESHOLDS);
+  const memStatus = resolveMetricStatus(data.memoryUsedPercent, MEM_THRESHOLDS);
 
-  const memColor =
-    data.memoryUsedPercent >= 85
-      ? colors.statusDanger
-      : data.memoryUsedPercent >= 70
-      ? colors.statusWarning
-      : colors.statusSuccess;
-
-  return { cpuColor, memColor };
+  return {
+    cpuColor: getStatusColor(cpuStatus, colors),
+    memColor: getStatusColor(memStatus, colors),
+  };
 }
 
-function PillView({ theme }: PluginComposerPillProps) {
+function PillView({ isOpen }: RenderPillProps) {
   const { colors } = usePluginTheme();
   const { data, isError, isLoading } = useRpcQuery(
     getSystemResourcesRpc,
@@ -75,13 +78,13 @@ function PillView({ theme }: PluginComposerPillProps) {
   }
 
   const { cpuColor, memColor } = getMetricColors(data, colors);
-  const ramGb = (data.memoryUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
+  const ramGb = formatBytes(data.memoryUsedBytes, { compact: true, decimals: 1 });
 
   return (
-    <Text numberOfLines={1} style={styles.pillText}>
+    <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
       <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
       <Text style={{ color: colors.foregroundMuted }}>{" · "}</Text>
-      <Text style={{ color: memColor, fontWeight: "600" }}>{`${ramGb}G`}</Text>
+      <Text style={{ color: memColor, fontWeight: "600" }}>{ramGb}</Text>
     </Text>
   );
 }
@@ -125,8 +128,10 @@ function ResourceModal({ theme }: RenderModalProps) {
     <ModalBody>
       {/* Host Meta Card */}
       <Card variant="elevated">
-        <KeyValue label="Host" value={data.hostname} copyable />
-        <KeyValue label="Uptime" value={formatUptime(data.uptimeSeconds)} />
+        <KeyValueGroup columns={2}>
+          <KeyValue label="Host" value={data.hostname} copyable />
+          <KeyValue label="Uptime" value={formatUptime(data.uptimeSeconds)} />
+        </KeyValueGroup>
         <KeyValue
           label="Processor"
           value={data.cpuModel}
@@ -136,18 +141,18 @@ function ResourceModal({ theme }: RenderModalProps) {
 
       {/* CPU Utilization Card */}
       <Card variant="elevated">
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            CPU Utilization
-          </Text>
-          <Text style={[styles.metricHighlight, { color: cpuColor }]}>
-            {data.cpuUsagePercent}%
-          </Text>
-        </View>
+        <Card.Header
+          title="CPU Utilization"
+          value={
+            <Text style={[styles.metricHighlight, { color: cpuColor }]}>
+              {data.cpuUsagePercent}%
+            </Text>
+          }
+        />
 
         <ProgressBar
           value={data.cpuUsagePercent}
-          color={cpuColor}
+          thresholds={CPU_THRESHOLDS}
           height={8}
         />
 
@@ -160,18 +165,18 @@ function ResourceModal({ theme }: RenderModalProps) {
 
       {/* Memory Card */}
       <Card variant="elevated">
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            Memory
-          </Text>
-          <Text style={[styles.metricHighlight, { color: memColor }]}>
-            {data.memoryUsedPercent}%
-          </Text>
-        </View>
+        <Card.Header
+          title="Memory"
+          value={
+            <Text style={[styles.metricHighlight, { color: memColor }]}>
+              {data.memoryUsedPercent}%
+            </Text>
+          }
+        />
 
         <ProgressBar
           value={data.memoryUsedPercent}
-          color={memColor}
+          thresholds={MEM_THRESHOLDS}
           height={8}
         />
 
@@ -187,7 +192,9 @@ function ResourceModal({ theme }: RenderModalProps) {
 export function contributeClient(client: PluginClientContext) {
   return registerComposerPill(client, {
     id: "paseo-top",
-    title: "Host System Resources",
+    title: "top",
+    modalTitle: "Host System Resources",
+    modalIcon: "Activity",
     renderPill: (props) => <PillView {...props} />,
     renderModal: (props) => <ResourceModal {...props} />,
   });
@@ -203,18 +210,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     flexShrink: 1,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
+  pillTextActive: {
+    opacity: 0.85,
   },
   metricHighlight: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
   },
   errorBox: {
