@@ -1,5 +1,11 @@
 # paseo-top
 
+<p align="center">
+  <img src="screenshots/pill.png" alt="Paseo Top Composer Pill" />
+  <br /><br />
+  <img src="screenshots/modal.png" alt="Paseo Top Resource Modal" />
+</p>
+
 Live host system resource monitor for [Paseo](https://github.com/getpaseo/paseo).
 
 Displays real-time CPU and memory metrics right in the composer track bar without cluttering the screen, with a full-detail native modal available on click.
