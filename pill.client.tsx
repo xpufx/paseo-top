@@ -282,7 +282,7 @@ function ResourcePill({ theme, agentId }: PluginComposerPillProps) {
     if (hasError) {
       return (
         <>
-          <Icon name="Ghost" size={13} color={theme.colors.foregroundMuted} />
+          <Icon name="Ghost" size={13} color={theme.colors.statusDanger} />
           <Text
             numberOfLines={1}
             style={{ color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 }}
@@ -307,19 +307,43 @@ function ResourcePill({ theme, agentId }: PluginComposerPillProps) {
       );
     }
 
+    const cpuColor =
+      data.cpuUsagePercent >= 85
+        ? theme.colors.statusDanger
+        : data.cpuUsagePercent >= 60
+        ? theme.colors.statusWarning
+        : theme.colors.statusSuccess;
+
+    const memColor =
+      data.memoryUsedPercent >= 85
+        ? theme.colors.statusDanger
+        : data.memoryUsedPercent >= 70
+        ? theme.colors.statusWarning
+        : theme.colors.statusSuccess;
+
+    const iconColor =
+      data.cpuUsagePercent >= 85 || data.memoryUsedPercent >= 85
+        ? theme.colors.statusDanger
+        : data.cpuUsagePercent >= 60 || data.memoryUsedPercent >= 70
+        ? theme.colors.statusWarning
+        : theme.colors.statusSuccess;
+
     const ramGb = (data.memoryUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
+
     return (
       <>
-        <Icon name="Activity" size={12} color={theme.colors.foregroundMuted} />
+        <Icon name="Activity" size={13} color={iconColor} />
         <Text
           numberOfLines={1}
-          style={{ color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 }}
+          style={{ fontSize: 11, flexShrink: 1 }}
         >
-          {`${data.cpuUsagePercent}% · ${ramGb}G`}
+          <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
+          <Text style={{ color: theme.colors.foregroundMuted }}>{" · "}</Text>
+          <Text style={{ color: memColor, fontWeight: "600" }}>{`${ramGb}G`}</Text>
         </Text>
       </>
     );
-  }, [data, hasError, theme.colors.foregroundMuted]);
+  }, [data, hasError, theme.colors]);
 
   return (
     <>
