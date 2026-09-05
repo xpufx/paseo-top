@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { PluginClientContext } from "@getpaseo/plugin";
 import {
@@ -8,10 +8,14 @@ import {
   KeyValue,
   KeyValueGroup,
   ProgressBar,
+  MetricGauge,
+  Tabs,
   Icon,
   useRpcQuery,
+  useAutoRefreshQuery,
   usePluginTheme,
   getStatusColor,
+  triggerHaptic,
   type RenderModalProps,
   type RenderPillProps,
 } from "paseo-plugin-helper/client";
@@ -28,6 +32,11 @@ const EMPTY_PARAMS = {};
 
 const CPU_THRESHOLDS: MetricThresholds = { warning: 60, danger: 85 };
 const MEM_THRESHOLDS: MetricThresholds = { warning: 70, danger: 85 };
+
+const TABS = [
+  { id: "system", label: "System Resources", shortLabel: "System", icon: "Activity" },
+  { id: "context", label: "Workspace Context", shortLabel: "Context", icon: "GitBranch" },
+];
 
 function getMetricColors(
   data: SystemResources | undefined,
@@ -92,17 +101,30 @@ function PillView({ isOpen }: RenderPillProps) {
 
 function ResourceModal({ theme }: RenderModalProps) {
   const { colors } = usePluginTheme();
-  const { data, isError, error, isLoading } = useRpcQuery(
+  const [activeTab, setActiveTab] = useState("system");
+
+  const { data, isError, error, isLoading, isRefetching, refetch } = useAutoRefreshQuery(
     getSystemResourcesRpc,
     EMPTY_PARAMS,
     {
-      refetchInterval: 1500,
+      defaultRate: "2s",
+      isOpen: true,
     },
   );
 
+  const handleRefresh = () => {
+    triggerHaptic("light");
+    refetch();
+  };
+
+  const handleTabChange = (tabId: string) => {
+    triggerHaptic("light");
+    setActiveTab(tabId);
+  };
+
   if (isError && !data) {
     return (
-      <ModalBody>
+      <ModalBody refreshing={isRefetching} onRefresh={handleRefresh}>
         <Card variant="elevated">
           <View style={styles.errorBox}>
             <Icon name="Ghost" size={24} color={colors.statusDanger} />
@@ -117,7 +139,7 @@ function ResourceModal({ theme }: RenderModalProps) {
 
   if (isLoading || !data) {
     return (
-      <ModalBody>
+      <ModalBody refreshing={isRefetching} onRefresh={handleRefresh}>
         <Text style={{ color: colors.foregroundMuted }}>Loading system metrics…</Text>
       </ModalBody>
     );
@@ -126,66 +148,110 @@ function ResourceModal({ theme }: RenderModalProps) {
   const { cpuColor, memColor } = getMetricColors(data, colors);
 
   return (
-    <ModalBody>
-      {/* Host Meta Card */}
-      <Card variant="elevated">
-        <KeyValueGroup columns={2}>
-          <KeyValue label="Host" value={data.hostname} copyable />
-          <KeyValue label="Uptime" value={formatUptime(data.uptimeSeconds)} />
-        </KeyValueGroup>
-        <KeyValue
-          label="Processor"
-          value={data.cpuModel}
-          subValue={`(${data.cpuCores} cores)`}
-        />
-      </Card>
+    <ModalBody refreshing={isRefetching} onRefresh={handleRefresh}>
+      {/* Navigation Tabs */}
+      <Tabs
+        tabs={TABS}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        style={styles.tabs}
+      />
 
-      {/* CPU Utilization Card */}
-      <Card variant="elevated">
-        <Card.Header
-          title="CPU Utilization"
-          value={
-            <Text style={[styles.metricHighlight, { color: cpuColor }]}>
-              {data.cpuUsagePercent}%
+      {activeTab === "system" ? (
+        <>
+          {/* Dual Metric Gauges Hero */}
+          <Card variant="elevated">
+            <View style={styles.gaugeContainer}>
+              <MetricGauge
+                value={data.cpuUsagePercent}
+                thresholds={CPU_THRESHOLDS}
+                label="CPU Load"
+                size={82}
+              />
+              <MetricGauge
+                value={data.memoryUsedPercent}
+                thresholds={MEM_THRESHOLDS}
+                label="RAM Used"
+                size={82}
+              />
+            </View>
+          </Card>
+
+          {/* Host Meta Card */}
+          <Card variant="elevated">
+            <KeyValueGroup columns={2}>
+              <KeyValue label="Host" value={data.hostname} copyable />
+              <KeyValue label="Uptime" value={formatUptime(data.uptimeSeconds)} />
+            </KeyValueGroup>
+            <KeyValue
+              label="Processor"
+              value={data.cpuModel}
+              subValue={`(${data.cpuCores} cores)`}
+            />
+          </Card>
+
+          {/* CPU Utilization Card */}
+          <Card variant="elevated">
+            <Card.Header
+              title="CPU Details"
+              value={
+                <Text style={[styles.metricHighlight, { color: cpuColor }]}>
+                  {data.cpuUsagePercent}%
+                </Text>
+              }
+            />
+
+            <ProgressBar
+              value={data.cpuUsagePercent}
+              thresholds={CPU_THRESHOLDS}
+              height={8}
+            />
+
+            <KeyValue
+              label="Load Average (1m, 5m, 15m)"
+              value={data.loadAvg.map((n) => n.toFixed(2)).join("  ")}
+              mono
+            />
+          </Card>
+
+          {/* Memory Card */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Memory Details"
+              value={
+                <Text style={[styles.metricHighlight, { color: memColor }]}>
+                  {data.memoryUsedPercent}%
+                </Text>
+              }
+            />
+
+            <ProgressBar
+              value={data.memoryUsedPercent}
+              thresholds={MEM_THRESHOLDS}
+              height={8}
+            />
+
+            <KeyValue
+              label="Used / Total"
+              value={`${formatBytes(data.memoryUsedBytes)} / ${formatBytes(data.memoryTotalBytes)}`}
+            />
+          </Card>
+        </>
+      ) : (
+        /* Workspace Context Tab (Ready for branch, worktree, agent info) */
+        <Card variant="elevated">
+          <Card.Header
+            title="Workspace Context"
+            icon="GitBranch"
+            subtitle="Active branch, worktree & agent session"
+          />
+          <View style={styles.emptyContext}>
+            <Text style={[styles.contextPlaceholder, { color: colors.foregroundMuted }]}>
+              Workspace and agent context features coming next.
             </Text>
-          }
-        />
-
-        <ProgressBar
-          value={data.cpuUsagePercent}
-          thresholds={CPU_THRESHOLDS}
-          height={8}
-        />
-
-        <KeyValue
-          label="Load Average (1m, 5m, 15m)"
-          value={data.loadAvg.map((n) => n.toFixed(2)).join("  ")}
-          mono
-        />
-      </Card>
-
-      {/* Memory Card */}
-      <Card variant="elevated">
-        <Card.Header
-          title="Memory"
-          value={
-            <Text style={[styles.metricHighlight, { color: memColor }]}>
-              {data.memoryUsedPercent}%
-            </Text>
-          }
-        />
-
-        <ProgressBar
-          value={data.memoryUsedPercent}
-          thresholds={MEM_THRESHOLDS}
-          height={8}
-        />
-
-        <KeyValue
-          label="Used / Total"
-          value={`${formatBytes(data.memoryUsedBytes)} / ${formatBytes(data.memoryTotalBytes)}`}
-        />
-      </Card>
+          </View>
+        </Card>
+      )}
 
       {/* Discrete Version Footer */}
       <View style={styles.footer}>
@@ -244,5 +310,24 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  tabs: {
+    marginBottom: 4,
+  },
+  gaugeContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  emptyContext: {
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  contextPlaceholder: {
+    fontSize: 13,
+    textAlign: "center",
   },
 });
