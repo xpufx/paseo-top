@@ -10,21 +10,23 @@ Live host system resource monitor for [Paseo](https://github.com/getpaseo/paseo)
 
 Displays real-time CPU and memory metrics right in the composer track bar without cluttering the screen, with a full-detail native modal available on click.
 
-Built with [`paseo-plugin-helper`](https://github.com/xpufx/paseo-plugin-helper) for native UI primitives (`Card`, `ProgressBar`, `KeyValueGroup`), structured logging, and typed RPC contracts.
+Built with [`paseo-plugin-helper`](https://github.com/xpufx/paseo-plugin-helper) for native UI primitives (`Card`, `MetricGauge`, `ProgressBar`, `KeyValueGroup`, `Tabs`), structured logging, and typed RPC contracts.
 
 ## Features
 
 - **Composer Pill**: Unobtrusive widget in the track bar directly above the agent prompt input.
+- **Circular Arc Gauges (`<MetricGauge>`)**: Dual circular gauges in the modal hero section for instant visual inspection of CPU and RAM load.
 - **Three-Tier Status Colors**:
   - 🟢 **Green** (`statusSuccess`): Normal load (< 60% CPU, < 70% RAM).
   - 🟠 **Orange** (`statusWarning`): Elevated usage (60%–84% CPU, 70%–84% RAM).
   - 🔴 **Red** (`statusDanger`): Critical usage (≥ 85% CPU or RAM).
+- **Smart Lifecycle Polling (`useAutoRefreshQuery`)**: Automatically halts background polling when the modal is closed to conserve mobile battery and device CPU.
+- **Pull-to-Refresh & Haptics**: Native pull-to-refresh on mobile via `<ModalBody>` with tactile haptic feedback (`triggerHaptic`).
+- **Tabbed Modal Navigation (`<Tabs>`)**:
+  - **System Resources**: Gauges, detailed CPU meters, memory stats, load averages (1m, 5m, 15m), and host specs.
+  - **Workspace Context**: Dedicated tab for active workspace, branch, worktree, and agent session details.
+- **Cross-Platform Clipboard**: 1-tap copy for hostname and metadata with native toast notifications across mobile and desktop.
 - **Ghost Fallback**: Displays a `Ghost` icon if metrics fail or the daemon host is unreachable.
-- **Native Modal Dialog**: Click the pill to pop open a detailed breakdown with visual meters:
-  - CPU utilization with load averages (1m, 5m, 15m).
-  - Memory usage (used vs total, percentage, Linux `/proc/meminfo` available-RAM accuracy).
-  - Host info (hostname, platform, CPU model & cores, uptime).
-  - Continuous live polling while open.
 
 ## Installation
 
