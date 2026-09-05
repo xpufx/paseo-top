@@ -10,33 +10,27 @@
   <img src="screenshots/paseo-top-settings.jpg" alt="Paseo Top Settings Tab" width="32%" />
 </p>
 
-Live host system resource monitor for [Paseo](https://github.com/getpaseo/paseo).
+Live host system and workspace monitor for [Paseo](https://github.com/getpaseo/paseo).
 
-Displays real-time CPU and memory metrics right in the composer track bar without cluttering the screen, with a full-detail native modal available on click.
-
-Built with [`paseo-plugin-helper`](https://github.com/xpufx/paseo-plugin-helper) for native UI primitives (`Card`, `MetricGauge`, `ProgressBar`, `KeyValueGroup`, `Tabs`), structured logging, and typed RPC contracts.
+Displays real-time system performance alongside your active Git branch and worktree context directly in the composer trackbar. A tap opens a comprehensive multi-tab modal for in-depth system vitals, workspace details, and display preferences.
 
 ## Features
 
-- **Alternating Composer Pill**: Cycles between system metrics and workspace info directly in the trackbar above the prompt input.
-- **Dedicated Git Branch & Worktree Location**: Resolves the real Git branch name directly from `.git` (standard checkouts, worktrees, detached HEAD) and displays the workspace/worktree folder location separately.
-- **Settings Tab**: Customizable controls for pill info groups (CPU/RAM, Git Branch, Worktree Location, Agent/Model, System Load, Uptime), rotation speed (2s, 3s, 4s, 6s), and default modal tab.
-- **Default Modal Tab Preference**: Configurable initial tab (`System`, `Workspace`, or `Settings`) when opening the resource modal.
-- **Cross-Client Synced & Persisted**: Settings are stored daemon-side via `PluginStorage` and synchronized across all connected devices (desktop app, mobile, web) with optimistic updates via `usePluginSettings`.
-- **Workspace & Agent Context**: Tab with active Git branch, worktree directory (copyable), workspace title, project name, diff stats, and agent model/status.
-- **Circular Arc Gauges (`<MetricGauge>`)**: Dual circular gauges in the modal hero section for instant visual inspection of CPU and RAM load.
-- **Three-Tier Status Colors**:
-  - 🟢 **Green** (`statusSuccess`): Normal load (< 60% CPU, < 70% RAM).
-  - 🟠 **Orange** (`statusWarning`): Elevated usage (60%–84% CPU, 70%–84% RAM).
-  - 🔴 **Red** (`statusDanger`): Critical usage (≥ 85% CPU or RAM).
-- **Smart Lifecycle Polling (`useAutoRefreshQuery`)**: Automatically halts background polling when the modal is closed to conserve mobile battery and device CPU.
-- **Pull-to-Refresh & Haptics**: Native pull-to-refresh on mobile via `<ModalBody>` with tactile haptic feedback (`triggerHaptic`).
-- **Tabbed Modal Navigation (`<Tabs>`)**:
-  - **System**: Gauges, detailed CPU meters, memory stats, load averages (1m, 5m, 15m), and host specs.
-  - **Workspace**: Dedicated tab for active workspace, branch, worktree location, and agent session details.
-  - **Settings**: Preference toggles, rotation timer, and default tab selection.
-- **Cross-Platform Clipboard**: 1-tap copy for hostname, directory paths, and metadata with native toast notifications.
-- **Ghost Fallback**: Displays a `Ghost` icon if metrics fail or the daemon host is unreachable.
+- **Alternating Composer Pill**: Smoothly cycles through enabled system metrics and workspace info right above the prompt input.
+- **Git Branch & Worktree Awareness**: Displays the active Git branch and worktree directory so you always know where your agent is operating.
+- **Real-Time System Metrics**: Live CPU usage, RAM utilization, 1/5/15-minute load averages, and host uptime.
+- **Color-Coded Status Thresholds**: Clear visual indicators for normal, elevated, and critical system load.
+- **Full Workspace & Agent Context**: Inspect active branch, worktree filesystem path (with 1-tap copy), workspace title, project name, uncommitted git changes (`+diff / -diff`), and current agent model.
+- **Multi-Tab Modal**:
+  - **System**: Circular arc gauges, CPU meters, memory breakdown, load averages, and host specs.
+  - **Workspace**: Branch, worktree path, diff statistics, and agent session status.
+  - **Settings**: Info toggle switches, rotation interval controls, and default tab selection.
+- **Customizable Pill Info**: Choose exactly which items rotate in the composer pill (CPU & RAM, Git Branch, Worktree Location, Agent Model, System Load, Host Uptime).
+- **Configurable Rotation Speed**: Set cycle intervals to 2s, 3s, 4s, or 6s.
+- **Default Modal Tab Preference**: Choose which tab opens first when clicking the pill (System, Workspace, or Settings).
+- **Automatic Cross-Device Sync**: Settings persist daemon-side and automatically synchronize across desktop, mobile, and web clients.
+- **Mobile-Optimized**: Native pull-to-refresh, tactile haptic feedback, and battery-friendly background polling that pauses when the modal is closed.
+- **1-Tap Clipboard Copy**: Quick-copy paths, hostnames, and metadata with instant confirmation toasts.
 
 ## Installation
 
