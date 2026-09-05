@@ -152,9 +152,23 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     lastActivityAt: a?.lastActivityAt,
   }));
 
+  const hasAnyEnabled =
+    settings.showCpuRam ||
+    settings.showBranch ||
+    settings.showWorktree ||
+    settings.showAgentTitle ||
+    settings.showAgent ||
+    settings.showAgentProvider ||
+    settings.showAgentActivity ||
+    settings.showLoad ||
+    settings.showUptime;
+
+  // If no items are selected, fallback to CPU & RAM without mutating saved settings
+  const effectiveShowCpuRam = settings.showCpuRam || !hasAnyEnabled;
+
   const neededFields = useMemo(() => {
     const fields: ResourceField[] = [];
-    if (settings.showCpuRam) {
+    if (effectiveShowCpuRam) {
       fields.push("cpu", "memory");
     }
     if (settings.showBranch && workspaceDirectory) {
@@ -167,7 +181,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
       fields.push("uptime");
     }
     return fields;
-  }, [settings.showCpuRam, settings.showBranch, settings.showLoad, settings.showUptime, workspaceDirectory]);
+  }, [effectiveShowCpuRam, settings.showBranch, settings.showLoad, settings.showUptime, workspaceDirectory]);
 
   const shouldPoll = neededFields.length > 0;
 
@@ -192,7 +206,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     [workspaceDirectory],
   );
 
-  // Collect available items enabled by user settings
+  // Collect available items enabled by user settings (or fallback to cpu_ram)
   const items: (
     | "cpu_ram"
     | "branch"
@@ -204,7 +218,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     | "load"
     | "uptime"
   )[] = [];
-  if (settings.showCpuRam && data?.cpuUsagePercent !== undefined) items.push("cpu_ram");
+  if (effectiveShowCpuRam && data?.cpuUsagePercent !== undefined) items.push("cpu_ram");
   if (settings.showBranch && data?.branch) items.push("branch");
   if (settings.showWorktree && workspaceDirectory) items.push("worktree");
   if (settings.showAgentTitle && agent?.title) items.push("agent_title");
@@ -245,9 +259,12 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
 
   if (items.length === 0) {
     return (
-      <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
-        top…
-      </Text>
+      <View style={styles.pillContainer}>
+        <Icon name="Activity" size={12} color={colors.accent} />
+        <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+          top
+        </Text>
+      </View>
     );
   }
 
@@ -397,6 +414,17 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
   );
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
   const activeTab = selectedTab ?? (settings.defaultTab || "system");
+
+  const hasAnyPillEnabled =
+    settings.showCpuRam ||
+    settings.showBranch ||
+    settings.showWorktree ||
+    settings.showAgentTitle ||
+    settings.showAgent ||
+    settings.showAgentProvider ||
+    settings.showAgentActivity ||
+    settings.showLoad ||
+    settings.showUptime;
 
   // Ensure freshest settings are fetched whenever user views settings
   useEffect(() => {
@@ -659,7 +687,11 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
             <Card.Header
               title="Alternating Pill Info"
               icon="Sliders"
-              subtitle="Choose which items cycle in the composer trackbar"
+              subtitle={
+                !hasAnyPillEnabled
+                  ? "None selected — automatically showing CPU & RAM"
+                  : "Choose which items cycle in the composer trackbar"
+              }
             />
             <View style={styles.settingsToggles}>
               <Toggle
