@@ -29,7 +29,7 @@ Displays real-time system performance alongside your active Git branch and workt
 - **Configurable Rotation Speed**: Set cycle intervals to 2s, 3s, 4s, or 6s.
 - **Default Modal Tab Preference**: Choose which tab opens first when clicking the pill (System, Workspace, or Settings).
 - **Automatic Cross-Device Sync**: Settings persist daemon-side and automatically synchronize across desktop, mobile, and web clients.
-- **Mobile-Optimized**: Native pull-to-refresh, tactile haptic feedback, and battery-friendly background polling that pauses when the modal is closed.
+- **Battery & Resource Friendly**: Polling automatically pauses whenever the modal is closed to avoid unnecessary background CPU and battery drain.
 - **1-Tap Clipboard Copy**: Quick-copy paths, hostnames, and metadata with instant confirmation toasts.
 
 ## Installation
