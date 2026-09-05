@@ -32,7 +32,11 @@ export const getSystemResourcesRpc = defineContract({
 
 export type SystemResources = RpcOutput<typeof getSystemResourcesRpc>;
 
+export const PillModeSchema = z.enum(["cycle", "all", "multiple"]).default("cycle");
+export type PillMode = z.infer<typeof PillModeSchema>;
+
 export const TopSettingsSchema = z.object({
+  pillMode: PillModeSchema,
   showCpuRam: z.boolean().default(true),
   showBranch: z.boolean().default(true),
   showWorktree: z.boolean().default(true),
