@@ -2,8 +2,12 @@
 
 <p align="center">
   <img src="screenshots/pill.png" alt="Paseo Top Composer Pill" />
-  <br /><br />
-  <img src="screenshots/modal.png" alt="Paseo Top Resource Modal" />
+</p>
+
+<p align="center">
+  <img src="screenshots/paseo-top-system.jpg" alt="Paseo Top System Tab" width="32%" />
+  <img src="screenshots/paseo-top-workspace.jpg" alt="Paseo Top Workspace Tab" width="32%" />
+  <img src="screenshots/paseo-top-settings.jpg" alt="Paseo Top Settings Tab" width="32%" />
 </p>
 
 Live host system resource monitor for [Paseo](https://github.com/getpaseo/paseo).
