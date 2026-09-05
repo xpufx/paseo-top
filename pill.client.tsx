@@ -11,6 +11,7 @@ import {
   registerComposerPill,
   ModalBody,
   Card,
+  Button,
   KeyValue,
   KeyValueGroup,
   ProgressBar,
@@ -21,6 +22,7 @@ import {
   Icon,
   useRpcQuery,
   useAutoRefreshQuery,
+  usePluginSettings,
   usePluginTheme,
   getStatusColor,
   triggerHaptic,
@@ -33,8 +35,11 @@ import {
   resolveMetricStatus,
   type MetricThresholds,
 } from "paseo-plugin-helper/shared";
-import { getSystemResourcesRpc, type SystemResources } from "./resources.shared";
-import { usePillSettings } from "./pill-settings";
+import {
+  getSystemResourcesRpc,
+  topSettingsContract,
+  type SystemResources,
+} from "./resources.shared";
 import { PLUGIN_VERSION } from "./version";
 
 const EMPTY_PARAMS = {};
@@ -70,7 +75,7 @@ function getMetricColors(
 
 function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
   const { colors } = usePluginTheme();
-  const [settings] = usePillSettings();
+  const { settings } = usePluginSettings(topSettingsContract);
 
   const workspaceName = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.name);
   const agentInfo = useAgent(agentId, (a: PluginAgentSnapshot) => a?.model || a?.provider || a?.title);
@@ -189,7 +194,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
 function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
   const { colors } = usePluginTheme();
   const [activeTab, setActiveTab] = useState("system");
-  const [settings, updateSettings] = usePillSettings();
+  const { settings, updateSettings, resetSettings } = usePluginSettings(topSettingsContract);
 
   const workspace = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => ({
     name: w?.name,
@@ -489,6 +494,15 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
               ))}
             </View>
           </Card>
+
+          <Button
+            label="Reset to Defaults"
+            variant="secondary"
+            onPress={() => {
+              triggerHaptic("medium");
+              resetSettings();
+            }}
+          />
         </>
       )}
 

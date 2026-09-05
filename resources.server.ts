@@ -3,13 +3,35 @@ import os from "node:os";
 import {
   getSystemMetrics,
   createPluginLogger,
+  PluginStorage,
 } from "paseo-plugin-helper/server";
-import type { SystemResources } from "./resources.shared";
+import {
+  type SystemResources,
+  topSettingsContract,
+  type TopSettings,
+} from "./resources.shared";
 import { PLUGIN_VERSION } from "./version";
 
 export const log = createPluginLogger("top", { version: PLUGIN_VERSION });
 
 log.info("Initialized host system resources monitor", { version: PLUGIN_VERSION });
+
+const settingsStorage = new PluginStorage<TopSettings>("top", "settings.json", {
+  schema: topSettingsContract.schema,
+});
+
+export async function handleGetSettings(): Promise<TopSettings> {
+  return settingsStorage.readAsync();
+}
+
+export async function handleUpdateSettings(patch: Partial<TopSettings>): Promise<TopSettings> {
+  return settingsStorage.updateAsync((prev) => ({ ...prev, ...patch }));
+}
+
+export async function handleResetSettings(): Promise<TopSettings> {
+  settingsStorage.reset();
+  return topSettingsContract.defaultSettings;
+}
 
 export async function handleGetSystemResources(): Promise<SystemResources> {
   const metrics = getSystemMetrics();

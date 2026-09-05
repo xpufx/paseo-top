@@ -1,4 +1,4 @@
-import { defineContract, type RpcOutput } from "paseo-plugin-helper/shared";
+import { defineContract, defineSettingsContract, type RpcOutput } from "paseo-plugin-helper/shared";
 import { z } from "zod";
 
 export const getSystemResourcesRpc = defineContract({
@@ -22,3 +22,20 @@ export const getSystemResourcesRpc = defineContract({
 });
 
 export type SystemResources = RpcOutput<typeof getSystemResourcesRpc>;
+
+export const TopSettingsSchema = z.object({
+  showCpuRam: z.boolean().default(true),
+  showWorktree: z.boolean().default(true),
+  showAgent: z.boolean().default(false),
+  showLoad: z.boolean().default(false),
+  showUptime: z.boolean().default(false),
+  intervalSeconds: z.number().min(1).max(60).default(3),
+});
+
+export type TopSettings = z.infer<typeof TopSettingsSchema>;
+
+export const topSettingsContract = defineSettingsContract({
+  name: "top.settings",
+  schema: TopSettingsSchema,
+  description: "Paseo top composer pill and display settings",
+});
