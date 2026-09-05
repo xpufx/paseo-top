@@ -230,13 +230,14 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
 
 function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
   const { colors } = usePluginTheme();
-  const [activeTab, setActiveTab] = useState("system");
   const { settings, updateSettings, resetSettings, refetch: refetchSettings } = usePluginSettings(
     topSettingsContract,
     {
       refetchInterval: 2000,
     },
   );
+  const [selectedTab, setSelectedTab] = useState<string | null>(null);
+  const activeTab = selectedTab ?? (settings.defaultTab || "system");
 
   // Ensure freshest settings are fetched whenever user views settings
   useEffect(() => {
@@ -282,7 +283,7 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
 
   const handleTabChange = (tabId: string) => {
     triggerHaptic("light");
-    setActiveTab(tabId);
+    setSelectedTab(tabId);
   };
 
   if (isError && !data) {
@@ -558,12 +559,62 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
             </View>
           </Card>
 
+          {/* Default Modal Tab Setting */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Default Modal Tab"
+              icon="Sliders"
+              value={
+                <Text style={{ color: colors.accent, fontWeight: "600" }}>
+                  {TABS.find((t) => t.id === settings.defaultTab)?.label || "System"}
+                </Text>
+              }
+            />
+            <View style={styles.speedRow}>
+              {TABS.map((tab) => {
+                const isSelected = (settings.defaultTab || "system") === tab.id;
+                return (
+                  <View
+                    key={tab.id}
+                    style={[
+                      styles.speedChip,
+                      {
+                        flex: 1,
+                        backgroundColor: isSelected ? colors.accent : colors.surface1,
+                        borderColor: isSelected ? colors.accent : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      onPress={() => {
+                        triggerHaptic("light");
+                        updateSettings({
+                          defaultTab: tab.id as "system" | "context" | "settings",
+                        });
+                      }}
+                      style={[
+                        styles.speedChipText,
+                        {
+                          color: isSelected ? colors.accentForeground : colors.foreground,
+                          fontWeight: isSelected ? "700" : "500",
+                        },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
+
           <Button
             label="Reset to Defaults"
             variant="secondary"
             onPress={() => {
               triggerHaptic("medium");
               resetSettings();
+              setSelectedTab(null);
             }}
           />
         </>

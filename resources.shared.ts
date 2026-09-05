@@ -36,6 +36,7 @@ export const TopSettingsSchema = z.object({
   showLoad: z.boolean().default(false),
   showUptime: z.boolean().default(false),
   intervalSeconds: z.number().min(1).max(60).default(3),
+  defaultTab: z.enum(["system", "context", "settings"]).default("system"),
 });
 
 export type TopSettings = z.infer<typeof TopSettingsSchema>;
