@@ -39,6 +39,7 @@ import {
   getSystemResourcesRpc,
   topSettingsContract,
   type SystemResources,
+  type ResourceField,
 } from "./resources.shared";
 import { PLUGIN_VERSION } from "./version";
 
@@ -69,7 +70,11 @@ function getMetricColors(
   data: SystemResources | undefined,
   colors: ReturnType<typeof usePluginTheme>["colors"],
 ) {
-  if (!data) {
+  if (
+    !data ||
+    data.cpuUsagePercent === undefined ||
+    data.memoryUsedPercent === undefined
+  ) {
     return {
       cpuColor: colors.foregroundMuted,
       memColor: colors.foregroundMuted,
@@ -94,15 +99,38 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
   const workspaceDirectory = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.directory);
   const agentInfo = useAgent(agentId, (a: PluginAgentSnapshot) => a?.model || a?.provider || a?.title);
 
+  const neededFields = useMemo(() => {
+    const fields: ResourceField[] = [];
+    if (settings.showCpuRam) {
+      fields.push("cpu", "memory");
+    }
+    if (settings.showBranch && workspaceDirectory) {
+      fields.push("branch");
+    }
+    if (settings.showLoad) {
+      fields.push("load");
+    }
+    if (settings.showUptime) {
+      fields.push("uptime");
+    }
+    return fields;
+  }, [settings.showCpuRam, settings.showBranch, settings.showLoad, settings.showUptime, workspaceDirectory]);
+
+  const shouldPoll = neededFields.length > 0;
+
   const queryParams = useMemo(() => {
-    return workspaceDirectory ? { directory: workspaceDirectory } : EMPTY_PARAMS;
-  }, [workspaceDirectory]);
+    return {
+      ...(workspaceDirectory ? { directory: workspaceDirectory } : {}),
+      ...(shouldPoll ? { fields: neededFields } : {}),
+    };
+  }, [workspaceDirectory, shouldPoll, neededFields]);
 
   const { data, isError, isLoading } = useRpcQuery(
     getSystemResourcesRpc,
     queryParams,
     {
-      refetchInterval: 3000,
+      enabled: shouldPoll,
+      refetchInterval: shouldPoll ? 3000 : false,
     },
   );
 
@@ -113,7 +141,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
 
   // Collect available items enabled by user settings
   const items: ("cpu_ram" | "branch" | "worktree" | "agent" | "load" | "uptime")[] = [];
-  if (settings.showCpuRam && data) items.push("cpu_ram");
+  if (settings.showCpuRam && data?.cpuUsagePercent !== undefined) items.push("cpu_ram");
   if (settings.showBranch && data?.branch) items.push("branch");
   if (settings.showWorktree && workspaceDirectory) items.push("worktree");
   if (settings.showAgent && agentInfo) items.push("agent");
@@ -130,7 +158,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     return () => clearInterval(timer);
   }, [items.length, settings.intervalSeconds]);
 
-  if (isError) {
+  if (shouldPoll && isError) {
     return (
       <View style={styles.pillContainer}>
         <Icon name="Ghost" size={13} color={colors.statusDanger} />
@@ -141,7 +169,15 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     );
   }
 
-  if (isLoading || !data) {
+  if (shouldPoll && (isLoading || !data)) {
+    return (
+      <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+        top…
+      </Text>
+    );
+  }
+
+  if (items.length === 0) {
     return (
       <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
         top…
@@ -161,7 +197,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
             numberOfLines={1}
             style={[styles.pillText, isOpen && styles.pillTextActive, { color: colors.foreground, fontWeight: "600" }]}
           >
-            {data.branch}
+            {data?.branch ?? "Unknown"}
           </Text>
         </View>
       );
@@ -197,7 +233,9 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
         <View style={styles.pillContainer}>
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
             <Text style={{ color: colors.foregroundMuted }}>{"load "}</Text>
-            <Text style={{ color: cpuColor, fontWeight: "600" }}>{data.loadAvg[0]?.toFixed(2)}</Text>
+            <Text style={{ color: cpuColor, fontWeight: "600" }}>
+              {data?.loadAvg?.[0] !== undefined ? data.loadAvg[0].toFixed(2) : "--"}
+            </Text>
           </Text>
         </View>
       );
@@ -208,7 +246,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
             <Text style={{ color: colors.foregroundMuted }}>{"up "}</Text>
             <Text style={{ color: colors.foreground, fontWeight: "600" }}>
-              {formatUptime(data.uptimeSeconds)}
+              {data?.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
             </Text>
           </Text>
         </View>
@@ -216,10 +254,15 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
 
     case "cpu_ram":
     default: {
-      const ramGb = formatBytes(data.memoryUsedBytes, { compact: true, decimals: 1 });
+      const ramGb =
+        data?.memoryUsedBytes !== undefined
+          ? formatBytes(data.memoryUsedBytes, { compact: true, decimals: 1 })
+          : "--";
+      const cpuText =
+        data?.cpuUsagePercent !== undefined ? `${data.cpuUsagePercent}%` : "--";
       return (
         <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
-          <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
+          <Text style={{ color: cpuColor, fontWeight: "600" }}>{cpuText}</Text>
           <Text style={{ color: colors.foregroundMuted }}>{" · "}</Text>
           <Text style={{ color: memColor, fontWeight: "600" }}>{ramGb}</Text>
         </Text>
@@ -327,13 +370,13 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
           <Card variant="elevated">
             <View style={styles.gaugeContainer}>
               <MetricGauge
-                value={data.cpuUsagePercent}
+                value={data.cpuUsagePercent ?? 0}
                 thresholds={CPU_THRESHOLDS}
                 label="CPU Load"
                 size={82}
               />
               <MetricGauge
-                value={data.memoryUsedPercent}
+                value={data.memoryUsedPercent ?? 0}
                 thresholds={MEM_THRESHOLDS}
                 label="RAM Used"
                 size={82}
@@ -344,13 +387,16 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
           {/* Host Meta Card */}
           <Card variant="elevated">
             <KeyValueGroup columns={2}>
-              <KeyValue label="Host" value={data.hostname} copyable />
-              <KeyValue label="Uptime" value={formatUptime(data.uptimeSeconds)} />
+              <KeyValue label="Host" value={data.hostname ?? "Unknown"} copyable />
+              <KeyValue
+                label="Uptime"
+                value={data.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
+              />
             </KeyValueGroup>
             <KeyValue
               label="Processor"
-              value={data.cpuModel}
-              subValue={`(${data.cpuCores} cores)`}
+              value={data.cpuModel ?? "--"}
+              subValue={data.cpuCores ? `(${data.cpuCores} cores)` : undefined}
             />
           </Card>
 
@@ -360,20 +406,20 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
               title="CPU Details"
               value={
                 <Text style={[styles.metricHighlight, { color: cpuColor }]}>
-                  {data.cpuUsagePercent}%
+                  {data.cpuUsagePercent ?? 0}%
                 </Text>
               }
             />
 
             <ProgressBar
-              value={data.cpuUsagePercent}
+              value={data.cpuUsagePercent ?? 0}
               thresholds={CPU_THRESHOLDS}
               height={8}
             />
 
             <KeyValue
               label="Load Average (1m, 5m, 15m)"
-              value={data.loadAvg.map((n) => n.toFixed(2)).join("  ")}
+              value={data.loadAvg ? data.loadAvg.map((n) => n.toFixed(2)).join("  ") : "--"}
               mono
             />
           </Card>
@@ -384,20 +430,20 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
               title="Memory Details"
               value={
                 <Text style={[styles.metricHighlight, { color: memColor }]}>
-                  {data.memoryUsedPercent}%
+                  {data.memoryUsedPercent ?? 0}%
                 </Text>
               }
             />
 
             <ProgressBar
-              value={data.memoryUsedPercent}
+              value={data.memoryUsedPercent ?? 0}
               thresholds={MEM_THRESHOLDS}
               height={8}
             />
 
             <KeyValue
               label="Used / Total"
-              value={`${formatBytes(data.memoryUsedBytes)} / ${formatBytes(data.memoryTotalBytes)}`}
+              value={`${formatBytes(data.memoryUsedBytes ?? 0)} / ${formatBytes(data.memoryTotalBytes ?? 0)}`}
             />
           </Card>
         </>

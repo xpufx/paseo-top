@@ -1,27 +1,31 @@
 import { defineContract, defineSettingsContract, type RpcOutput } from "paseo-plugin-helper/shared";
 import { z } from "zod";
 
+export const ResourceFieldSchema = z.enum(["cpu", "memory", "load", "uptime", "branch"]);
+export type ResourceField = z.infer<typeof ResourceFieldSchema>;
+
 export const getSystemResourcesRpc = defineContract({
   name: "system-resources.get",
   description: "Retrieve real-time host system resource metrics (CPU, RAM, load, uptime)",
   input: z
     .object({
       directory: z.string().optional(),
+      fields: z.array(ResourceFieldSchema).optional(),
     })
     .default({}),
   output: z.object({
     version: z.string(),
-    hostname: z.string(),
-    platform: z.string(),
-    arch: z.string(),
-    cpuModel: z.string(),
-    cpuCores: z.number(),
-    cpuUsagePercent: z.number(),
-    memoryUsedBytes: z.number(),
-    memoryTotalBytes: z.number(),
-    memoryUsedPercent: z.number(),
-    loadAvg: z.array(z.number()),
-    uptimeSeconds: z.number(),
+    hostname: z.string().optional(),
+    platform: z.string().optional(),
+    arch: z.string().optional(),
+    cpuModel: z.string().optional(),
+    cpuCores: z.number().optional(),
+    cpuUsagePercent: z.number().optional(),
+    memoryUsedBytes: z.number().optional(),
+    memoryTotalBytes: z.number().optional(),
+    memoryUsedPercent: z.number().optional(),
+    loadAvg: z.array(z.number()).optional(),
+    uptimeSeconds: z.number().optional(),
     branch: z.string().nullable().optional(),
   }),
 });

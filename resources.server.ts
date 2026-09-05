@@ -11,6 +11,7 @@ import {
   type SystemResources,
   topSettingsContract,
   type TopSettings,
+  type ResourceField,
 } from "./resources.shared";
 import { PLUGIN_VERSION } from "./version";
 
@@ -92,46 +93,96 @@ export function resolveGitBranch(dir?: string | null): string | null {
 
 export async function handleGetSystemResources(input?: {
   directory?: string;
+  fields?: ResourceField[];
 }): Promise<SystemResources> {
-  const metrics = getSystemMetrics();
+  const fields = input?.fields;
+  const isSelective = Array.isArray(fields) && fields.length > 0;
 
-  let usedMem = metrics.memory.usedBytes;
-  const totalMem = metrics.memory.totalBytes;
-  let memoryUsedPercent = Math.round(metrics.memory.usedPercent);
+  const needCpu = !isSelective || fields.includes("cpu");
+  const needMem = !isSelective || fields.includes("memory");
+  const needLoad = !isSelective || fields.includes("load");
+  const needUptime = !isSelective || fields.includes("uptime");
+  const needBranch = !isSelective || fields.includes("branch");
 
-  if (process.platform === "linux") {
-    try {
-      const meminfo = fs.readFileSync("/proc/meminfo", "utf8");
-      const match = meminfo.match(/MemAvailable:\s+(\d+)\s+kB/);
-      if (match && match[1]) {
-        const available = parseInt(match[1], 10) * 1024;
-        usedMem = Math.max(0, totalMem - available);
-        memoryUsedPercent = Math.round((usedMem / totalMem) * 100);
-      }
-    } catch {
-      // Fallback to metrics.memory
+  let branch: string | null | undefined = undefined;
+  if (needBranch) {
+    branch = resolveGitBranch(input?.directory);
+  }
+
+  let cpuUsagePercent: number | undefined = undefined;
+  let usedMem: number | undefined = undefined;
+  let totalMem: number | undefined = undefined;
+  let memoryUsedPercent: number | undefined = undefined;
+  let loadAvg: number[] | undefined = undefined;
+  let uptimeSeconds: number | undefined = undefined;
+
+  let hostname: string | undefined = undefined;
+  let platform: string | undefined = undefined;
+  let arch: string | undefined = undefined;
+  let cpuModel: string | undefined = undefined;
+  let cpuCores: number | undefined = undefined;
+
+  if (needCpu || !isSelective) {
+    const metrics = getSystemMetrics();
+    cpuUsagePercent = metrics.cpu.usagePercent;
+    if (!isSelective) {
+      hostname = metrics.hostname;
+      platform = `${os.type()} ${os.release()}`;
+      arch = metrics.arch;
+      cpuModel = metrics.cpu.model;
+      cpuCores = metrics.cpu.cores;
+      loadAvg = metrics.cpu.loadAverage;
+      uptimeSeconds = metrics.uptimeSeconds;
+      totalMem = metrics.memory.totalBytes;
+      usedMem = metrics.memory.usedBytes;
+      memoryUsedPercent = Math.round(metrics.memory.usedPercent);
     }
   }
 
-  if (memoryUsedPercent >= 90) {
-    log.warn("Memory threshold critical", { usedPercent: memoryUsedPercent });
+  if (needMem) {
+    if (totalMem === undefined) {
+      totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      usedMem = totalMem - freeMem;
+      memoryUsedPercent = Math.round((usedMem / totalMem) * 100);
+    }
+
+    if (process.platform === "linux") {
+      try {
+        const meminfo = fs.readFileSync("/proc/meminfo", "utf8");
+        const match = meminfo.match(/MemAvailable:\s+(\d+)\s+kB/);
+        if (match && match[1]) {
+          const available = parseInt(match[1], 10) * 1024;
+          usedMem = Math.max(0, totalMem - available);
+          memoryUsedPercent = Math.round((usedMem / totalMem) * 100);
+        }
+      } catch {
+        // Fallback to metrics.memory
+      }
+    }
   }
 
-  const branch = resolveGitBranch(input?.directory);
+  if (needLoad && loadAvg === undefined) {
+    loadAvg = os.loadavg();
+  }
+
+  if (needUptime && uptimeSeconds === undefined) {
+    uptimeSeconds = Math.floor(os.uptime());
+  }
 
   return {
     version: PLUGIN_VERSION,
-    hostname: metrics.hostname,
-    platform: `${os.type()} ${os.release()}`,
-    arch: metrics.arch,
-    cpuModel: metrics.cpu.model,
-    cpuCores: metrics.cpu.cores,
-    cpuUsagePercent: metrics.cpu.usagePercent,
+    hostname,
+    platform,
+    arch,
+    cpuModel,
+    cpuCores,
+    cpuUsagePercent,
     memoryUsedBytes: usedMem,
     memoryTotalBytes: totalMem,
     memoryUsedPercent,
-    loadAvg: metrics.cpu.loadAverage,
-    uptimeSeconds: metrics.uptimeSeconds,
+    loadAvg,
+    uptimeSeconds,
     branch,
   };
 }
