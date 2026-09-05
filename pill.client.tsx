@@ -196,7 +196,19 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
 function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
   const { colors } = usePluginTheme();
   const [activeTab, setActiveTab] = useState("system");
-  const { settings, updateSettings, resetSettings } = usePluginSettings(topSettingsContract);
+  const { settings, updateSettings, resetSettings, refetch: refetchSettings } = usePluginSettings(
+    topSettingsContract,
+    {
+      refetchInterval: 2000,
+    },
+  );
+
+  // Ensure freshest settings are fetched whenever user views settings
+  useEffect(() => {
+    if (activeTab === "settings") {
+      void refetchSettings();
+    }
+  }, [activeTab, refetchSettings]);
 
   const workspace = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => ({
     name: w?.name,
@@ -226,6 +238,7 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
   const handleRefresh = () => {
     triggerHaptic("light");
     refetch();
+    void refetchSettings();
   };
 
   const handleTabChange = (tabId: string) => {

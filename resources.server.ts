@@ -21,14 +21,20 @@ const settingsStorage = new PluginStorage<TopSettings>("top", "settings.json", {
 });
 
 export async function handleGetSettings(): Promise<TopSettings> {
-  return settingsStorage.readAsync();
+  const data = await settingsStorage.readAsync();
+  log.info("Settings read requested", { settings: data });
+  return data;
 }
 
 export async function handleUpdateSettings(patch: Partial<TopSettings>): Promise<TopSettings> {
-  return settingsStorage.updateAsync((prev) => ({ ...prev, ...patch }));
+  log.info("Settings update requested", { patch });
+  const updated = await settingsStorage.updateAsync((prev) => ({ ...prev, ...patch }));
+  log.info("Settings updated successfully", { updated });
+  return updated;
 }
 
 export async function handleResetSettings(): Promise<TopSettings> {
+  log.info("Settings reset requested");
   settingsStorage.reset();
   return topSettingsContract.defaultSettings;
 }
