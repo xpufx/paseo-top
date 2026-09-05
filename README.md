@@ -28,11 +28,12 @@ Displays real-time system performance alongside your active Git branch and workt
   - **System**: Circular arc gauges, CPU meters, memory breakdown, load averages, and host specs.
   - **Workspace**: Branch, worktree path, diff statistics, and agent session status.
   - **Settings**: Pill display mode selector, active item toggles, rotation speed, and default tab selection.
+  - **About**: Plugin branding, author info, repository & issue links, runtime environment details, and one-click diagnostics copy.
 - **Customizable Pill Info**: Choose exactly which items appear across 9 distinct metrics (CPU & RAM, Git Branch, Worktree Location, Agent Tab Title, Model, Provider, Inactivity / Idle Time, System Load, Host Uptime).
 - **Fail-Safe Fallback**: If all pill switches are turned off, the pill automatically falls back to displaying CPU & RAM in-memory so the modal can always be launched.
 - **Zero-Poll Efficiency**: Selectively queries only active metrics from the host; in Multiple Pills mode, each individual pill only polls the specific fields it requires.
 - **Configurable Rotation Speed**: Set cycle intervals to 2s, 3s, 4s, or 6s (dynamically shown in Cycle mode).
-- **Default Modal Tab Preference**: Choose which tab opens first when clicking the pill (System, Workspace, or Settings).
+- **Default Modal Tab Preference**: Choose which tab opens first when clicking the pill (System, Workspace, Settings, or About).
 - **Automatic Cross-Device Sync**: Settings persist daemon-side and automatically synchronize across desktop, mobile, and web clients.
 - **1-Tap Clipboard Copy**: Quick-copy paths, hostnames, and metadata with instant confirmation toasts.
 

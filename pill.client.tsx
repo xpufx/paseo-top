@@ -20,6 +20,7 @@ import {
   Toggle,
   Badge,
   Icon,
+  AboutSection,
   useRpcQuery,
   useAutoRefreshQuery,
   usePluginSettings,
@@ -113,6 +114,7 @@ const TABS = [
   { id: "system", label: "System", shortLabel: "System", icon: "Activity" },
   { id: "context", label: "Workspace", shortLabel: "Workspace", icon: "GitBranch" },
   { id: "settings", label: "Settings", shortLabel: "Settings", icon: "Sliders" },
+  { id: "about", label: "About", shortLabel: "About", icon: "Info" },
 ];
 
 function getMetricColors(
@@ -586,7 +588,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
 }
 
 interface ResourceModalProps extends RenderModalProps {
-  initialTab?: "system" | "context" | "settings";
+  initialTab?: "system" | "context" | "settings" | "about";
 }
 
 function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModalProps) {
@@ -1110,7 +1112,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
                       onPress={() => {
                         triggerHaptic("light");
                         updateSettings({
-                          defaultTab: tab.id as "system" | "context" | "settings",
+                          defaultTab: tab.id as "system" | "context" | "settings" | "about",
                         });
                       }}
                       style={[
@@ -1142,12 +1144,51 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
         </>
       )}
 
+      {activeTab === "about" && (
+        <AboutSection
+          name="paseo-top"
+          description="Live host system and workspace monitor for Paseo composer trackbar."
+          version={data?.version ?? PLUGIN_VERSION}
+          author="xpufx"
+          repository="https://github.com/xpufx/paseo-top"
+          issues="https://github.com/xpufx/paseo-top/issues"
+          license="MIT"
+          extraItems={[
+            {
+              label: "Host Platform",
+              value: data?.platform ? `${data.platform} (${data.arch ?? "unknown"})` : "Linux",
+              copyable: true,
+            },
+            { label: "Host Name", value: data?.hostname ?? "localhost", copyable: true },
+            { label: "CPU Model", value: data?.cpuModel ?? "unknown", copyable: true },
+            {
+              label: "CPU Cores",
+              value: `${data?.cpuCores ?? 0} cores`,
+            },
+            {
+              label: "Total Memory",
+              value: data?.memoryTotalBytes ? formatBytes(data.memoryTotalBytes) : "unknown",
+            },
+            {
+              label: "Host Uptime",
+              value: data?.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "unknown",
+            },
+            { label: "Active Workspace", value: workspace?.name ?? "none", copyable: true },
+            { label: "Workspace Directory", value: workspace?.directory ?? "unknown", copyable: true },
+            { label: "Active Git Branch", value: data?.branch ?? "unknown", copyable: true },
+            { label: "Agent Model", value: agent?.model ?? "none", copyable: true },
+          ]}
+        />
+      )}
+
       {/* Discrete Version Footer */}
-      <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: colors.foregroundMuted }]}>
-          top v{data?.version ?? PLUGIN_VERSION}
-        </Text>
-      </View>
+      {activeTab !== "about" && (
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: colors.foregroundMuted }]}>
+            top v{data?.version ?? PLUGIN_VERSION}
+          </Text>
+        </View>
+      )}
     </ModalBody>
   );
 }
