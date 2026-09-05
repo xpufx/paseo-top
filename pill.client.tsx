@@ -57,6 +57,37 @@ function formatWorktreeLocation(dir: string | null | undefined): string {
   return segments[segments.length - 1] || clean;
 }
 
+function formatTimeAgo(isoString: string | null | undefined): string {
+  if (!isoString) return "--";
+  const time = new Date(isoString).getTime();
+  if (isNaN(time)) return "--";
+  const diffMs = Math.max(0, Date.now() - time);
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 30) return "just now";
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ${mins % 60}m ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatIdleDuration(isoString: string | null | undefined): string {
+  if (!isoString) return "--";
+  const time = new Date(isoString).getTime();
+  if (isNaN(time)) return "--";
+  const diffMs = Math.max(0, Date.now() - time);
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ${secs % 60}s`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ${mins % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
+}
+
 const CPU_THRESHOLDS: MetricThresholds = { warning: 60, danger: 85 };
 const MEM_THRESHOLDS: MetricThresholds = { warning: 70, danger: 85 };
 
@@ -97,7 +128,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
   });
 
   const workspaceDirectory = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.directory);
-  const agentInfo = useAgent(agentId, (a: PluginAgentSnapshot) => a?.model || a?.provider || a?.title);
+  const agentInfo = useAgent(agentId, (a: PluginAgentSnapshot) => a?.title || a?.model || a?.provider);
 
   const neededFields = useMemo(() => {
     const fields: ResourceField[] = [];
@@ -291,18 +322,22 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
 
   const workspace = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => ({
     name: w?.name,
+    title: w?.title,
     projectDisplayName: w?.projectDisplayName,
     directory: w?.directory,
     kind: w?.kind,
     status: w?.status,
+    statusEnteredAt: w?.statusEnteredAt,
     diffStat: w?.diffStat,
   }));
 
   const agent = useAgent(agentId, (a: PluginAgentSnapshot) => ({
+    title: a?.title,
     model: a?.model,
     provider: a?.provider,
     status: a?.status,
     cwd: a?.cwd,
+    lastActivityAt: a?.lastActivityAt,
   }));
 
   const queryParams = useMemo(() => {
@@ -470,7 +505,10 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
               <KeyValue label="Worktree Location" value={workspace.directory} copyable mono />
             ) : null}
             {workspace?.name ? (
-              <KeyValue label="Workspace Title" value={workspace.name} />
+              <KeyValue label="Workspace Name" value={workspace.name} />
+            ) : null}
+            {workspace?.title && workspace.title !== workspace.name ? (
+              <KeyValue label="Workspace Title" value={workspace.title} />
             ) : null}
             {workspace?.projectDisplayName ? (
               <KeyValue label="Project" value={workspace.projectDisplayName} />
@@ -486,7 +524,7 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
           {/* Agent Information */}
           <Card variant="elevated">
             <Card.Header
-              title="Agent Session"
+              title={agent?.title ? `Agent: ${agent.title}` : "Agent Session"}
               icon="Bot"
               value={
                 agent?.status ? (
@@ -497,9 +535,30 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
                 ) : undefined
               }
             />
+            {agent?.title ? (
+              <KeyValue label="Agent Tab" value={agent.title} />
+            ) : null}
             <KeyValueGroup columns={2}>
               <KeyValue label="Model" value={agent?.model || "Standard"} />
               <KeyValue label="Provider" value={agent?.provider || "Default"} />
+            </KeyValueGroup>
+            <KeyValueGroup columns={2}>
+              <KeyValue
+                label="Last Worked"
+                value={
+                  agent?.status === "running"
+                    ? "Active now"
+                    : formatTimeAgo(agent?.lastActivityAt)
+                }
+              />
+              <KeyValue
+                label="Inactivity"
+                value={
+                  agent?.status === "running"
+                    ? "0s (active)"
+                    : formatIdleDuration(agent?.lastActivityAt)
+                }
+              />
             </KeyValueGroup>
             {agent?.cwd ? (
               <KeyValue label="Working Directory" value={agent.cwd} copyable mono />
@@ -538,7 +597,7 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
               />
               <Toggle
                 label="Agent / Model"
-                description="Active agent model name (e.g. claude-3-7-sonnet)"
+                description="Active agent tab title or model name"
                 value={settings.showAgent}
                 onValueChange={(val) => updateSettings({ showAgent: val })}
               />
