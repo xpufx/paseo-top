@@ -104,10 +104,34 @@ declare module "@getpaseo/plugin" {
     color?: string;
   }
   export const Icon: ComponentType<PluginIconProps>;
-  export function useRpc<InputSchema extends ZodType, OutputSchema extends ZodType>(
-    contract: PluginRpcContract<InputSchema, OutputSchema>,
-  ): (input: ZodInput<InputSchema>) => Promise<ZodOutput<OutputSchema>>;
-  export function usePaseo(): PaseoApi;
+  export interface PluginWorkspaceSnapshot {
+    readonly id: string;
+    readonly projectId: string;
+    readonly projectDisplayName: string;
+    readonly projectRootPath: string;
+    readonly directory: string;
+    readonly projectKind: "git" | "non_git" | "directory";
+    readonly kind: "directory" | "local_checkout" | "checkout" | "worktree";
+    readonly name: string;
+    readonly title: string | null;
+    readonly status: "needs_input" | "failed" | "running" | "attention" | "done";
+    readonly statusEnteredAt: string | null;
+    readonly archivingAt: string | null;
+    readonly diffStat: {
+      readonly additions: number;
+      readonly deletions: number;
+    } | null;
+  }
+
+  export function useWorkspace<Selection>(
+    workspaceId: string,
+    selector: (workspace: PluginWorkspaceSnapshot) => Selection,
+  ): Selection | null;
+
+  export function useAgent<Selection>(
+    agentId: string,
+    selector: (agent: PluginAgentSnapshot) => Selection,
+  ): Selection | null;
 
   export interface PluginAgentSnapshot {
     readonly id: string;

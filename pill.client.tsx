@@ -1,6 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import type { PluginClientContext } from "@getpaseo/plugin";
+import {
+  useWorkspace,
+  useAgent,
+  type PluginWorkspaceSnapshot,
+  type PluginAgentSnapshot,
+  type PluginClientContext,
+} from "@getpaseo/plugin";
 import {
   registerComposerPill,
   ModalBody,
@@ -10,6 +16,8 @@ import {
   ProgressBar,
   MetricGauge,
   Tabs,
+  Toggle,
+  Badge,
   Icon,
   useRpcQuery,
   useAutoRefreshQuery,
@@ -26,6 +34,7 @@ import {
   type MetricThresholds,
 } from "paseo-plugin-helper/shared";
 import { getSystemResourcesRpc, type SystemResources } from "./resources.shared";
+import { usePillSettings } from "./pill-settings";
 import { PLUGIN_VERSION } from "./version";
 
 const EMPTY_PARAMS = {};
@@ -34,8 +43,9 @@ const CPU_THRESHOLDS: MetricThresholds = { warning: 60, danger: 85 };
 const MEM_THRESHOLDS: MetricThresholds = { warning: 70, danger: 85 };
 
 const TABS = [
-  { id: "system", label: "System Resources", shortLabel: "System", icon: "Activity" },
-  { id: "context", label: "Workspace Context", shortLabel: "Context", icon: "GitBranch" },
+  { id: "system", label: "System", shortLabel: "System", icon: "Activity" },
+  { id: "context", label: "Workspace", shortLabel: "Workspace", icon: "GitBranch" },
+  { id: "settings", label: "Pill Display", shortLabel: "Pill", icon: "Sliders" },
 ];
 
 function getMetricColors(
@@ -58,8 +68,13 @@ function getMetricColors(
   };
 }
 
-function PillView({ isOpen }: RenderPillProps) {
+function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
   const { colors } = usePluginTheme();
+  const [settings] = usePillSettings();
+
+  const workspaceName = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.name);
+  const agentInfo = useAgent(agentId, (a: PluginAgentSnapshot) => a?.model || a?.provider || a?.title);
+
   const { data, isError, isLoading } = useRpcQuery(
     getSystemResourcesRpc,
     EMPTY_PARAMS,
@@ -67,6 +82,24 @@ function PillView({ isOpen }: RenderPillProps) {
       refetchInterval: 3000,
     },
   );
+
+  // Collect available items enabled by user settings
+  const items: ("cpu_ram" | "worktree" | "agent" | "load" | "uptime")[] = [];
+  if (settings.showCpuRam && data) items.push("cpu_ram");
+  if (settings.showWorktree && workspaceName) items.push("worktree");
+  if (settings.showAgent && agentInfo) items.push("agent");
+  if (settings.showLoad && data?.loadAvg?.[0] !== undefined) items.push("load");
+  if (settings.showUptime && data?.uptimeSeconds) items.push("uptime");
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (items.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % items.length);
+    }, settings.intervalSeconds * 1000);
+    return () => clearInterval(timer);
+  }, [items.length, settings.intervalSeconds]);
 
   if (isError) {
     return (
@@ -88,20 +121,91 @@ function PillView({ isOpen }: RenderPillProps) {
   }
 
   const { cpuColor, memColor } = getMetricColors(data, colors);
-  const ramGb = formatBytes(data.memoryUsedBytes, { compact: true, decimals: 1 });
+  const activeMode = items.length > 0 ? items[currentIndex % items.length] : "cpu_ram";
 
-  return (
-    <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
-      <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
-      <Text style={{ color: colors.foregroundMuted }}>{" · "}</Text>
-      <Text style={{ color: memColor, fontWeight: "600" }}>{ramGb}</Text>
-    </Text>
-  );
+  switch (activeMode) {
+    case "worktree":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="GitBranch" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[styles.pillText, isOpen && styles.pillTextActive, { color: colors.foreground, fontWeight: "600" }]}
+          >
+            {workspaceName}
+          </Text>
+        </View>
+      );
+
+    case "agent":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="Bot" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[styles.pillText, isOpen && styles.pillTextActive, { color: colors.foreground, fontWeight: "600" }]}
+          >
+            {agentInfo}
+          </Text>
+        </View>
+      );
+
+    case "load":
+      return (
+        <View style={styles.pillContainer}>
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: colors.foregroundMuted }}>{"load "}</Text>
+            <Text style={{ color: cpuColor, fontWeight: "600" }}>{data.loadAvg[0]?.toFixed(2)}</Text>
+          </Text>
+        </View>
+      );
+
+    case "uptime":
+      return (
+        <View style={styles.pillContainer}>
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: colors.foregroundMuted }}>{"up "}</Text>
+            <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+              {formatUptime(data.uptimeSeconds)}
+            </Text>
+          </Text>
+        </View>
+      );
+
+    case "cpu_ram":
+    default: {
+      const ramGb = formatBytes(data.memoryUsedBytes, { compact: true, decimals: 1 });
+      return (
+        <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+          <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
+          <Text style={{ color: colors.foregroundMuted }}>{" · "}</Text>
+          <Text style={{ color: memColor, fontWeight: "600" }}>{ramGb}</Text>
+        </Text>
+      );
+    }
+  }
 }
 
-function ResourceModal({ theme }: RenderModalProps) {
+function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
   const { colors } = usePluginTheme();
   const [activeTab, setActiveTab] = useState("system");
+  const [settings, updateSettings] = usePillSettings();
+
+  const workspace = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => ({
+    name: w?.name,
+    projectDisplayName: w?.projectDisplayName,
+    directory: w?.directory,
+    kind: w?.kind,
+    status: w?.status,
+    diffStat: w?.diffStat,
+  }));
+
+  const agent = useAgent(agentId, (a: PluginAgentSnapshot) => ({
+    model: a?.model,
+    provider: a?.provider,
+    status: a?.status,
+    cwd: a?.cwd,
+  }));
 
   const { data, isError, error, isLoading, isRefetching, refetch } = useAutoRefreshQuery(
     getSystemResourcesRpc,
@@ -157,7 +261,7 @@ function ResourceModal({ theme }: RenderModalProps) {
         style={styles.tabs}
       />
 
-      {activeTab === "system" ? (
+      {activeTab === "system" && (
         <>
           {/* Dual Metric Gauges Hero */}
           <Card variant="elevated">
@@ -237,20 +341,155 @@ function ResourceModal({ theme }: RenderModalProps) {
             />
           </Card>
         </>
-      ) : (
-        /* Workspace Context Tab (Ready for branch, worktree, agent info) */
-        <Card variant="elevated">
-          <Card.Header
-            title="Workspace Context"
-            icon="GitBranch"
-            subtitle="Active branch, worktree & agent session"
-          />
-          <View style={styles.emptyContext}>
-            <Text style={[styles.contextPlaceholder, { color: colors.foregroundMuted }]}>
-              Workspace and agent context features coming next.
-            </Text>
-          </View>
-        </Card>
+      )}
+
+      {activeTab === "context" && (
+        <>
+          {/* Workspace Information */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Workspace & Git"
+              icon="GitBranch"
+              value={
+                workspace?.status ? (
+                  <Badge label={workspace.status} variant="info" />
+                ) : undefined
+              }
+            />
+            <KeyValueGroup columns={2}>
+              <KeyValue label="Worktree / Branch" value={workspace?.name || "Unknown"} />
+              <KeyValue label="Kind" value={workspace?.kind || "Unknown"} />
+            </KeyValueGroup>
+            {workspace?.projectDisplayName ? (
+              <KeyValue label="Project" value={workspace.projectDisplayName} />
+            ) : null}
+            {workspace?.directory ? (
+              <KeyValue label="Directory" value={workspace.directory} copyable mono />
+            ) : null}
+            {workspace?.diffStat ? (
+              <KeyValue
+                label="Git Changes"
+                value={`+${workspace.diffStat.additions}  -${workspace.diffStat.deletions}`}
+              />
+            ) : null}
+          </Card>
+
+          {/* Agent Information */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Agent Session"
+              icon="Bot"
+              value={
+                agent?.status ? (
+                  <Badge
+                    label={agent.status}
+                    variant={agent.status === "running" ? "success" : "info"}
+                  />
+                ) : undefined
+              }
+            />
+            <KeyValueGroup columns={2}>
+              <KeyValue label="Model" value={agent?.model || "Standard"} />
+              <KeyValue label="Provider" value={agent?.provider || "Default"} />
+            </KeyValueGroup>
+            {agent?.cwd ? (
+              <KeyValue label="Working Directory" value={agent.cwd} copyable mono />
+            ) : null}
+          </Card>
+        </>
+      )}
+
+      {activeTab === "settings" && (
+        <>
+          {/* Alternating Pill Selectors */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Alternating Pill Info"
+              icon="Sliders"
+              subtitle="Choose which items cycle in the composer trackbar"
+            />
+            <View style={styles.settingsToggles}>
+              <Toggle
+                label="CPU & RAM Usage"
+                description="Live CPU load % and RAM used (e.g. 14% · 3.2G)"
+                value={settings.showCpuRam}
+                onValueChange={(val) => updateSettings({ showCpuRam: val })}
+              />
+              <Toggle
+                label="Worktree / Branch"
+                description="Active worktree or git branch name"
+                value={settings.showWorktree}
+                onValueChange={(val) => updateSettings({ showWorktree: val })}
+              />
+              <Toggle
+                label="Agent / Model"
+                description="Active agent model name (e.g. claude-3-7-sonnet)"
+                value={settings.showAgent}
+                onValueChange={(val) => updateSettings({ showAgent: val })}
+              />
+              <Toggle
+                label="System Load"
+                description="1-minute host load average (e.g. load 0.42)"
+                value={settings.showLoad}
+                onValueChange={(val) => updateSettings({ showLoad: val })}
+              />
+              <Toggle
+                label="Host Uptime"
+                description="System uptime duration (e.g. up 3d 4h)"
+                value={settings.showUptime}
+                onValueChange={(val) => updateSettings({ showUptime: val })}
+              />
+            </View>
+          </Card>
+
+          {/* Rotation Speed Setting */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Rotation Speed"
+              icon="Clock"
+              value={
+                <Text style={{ color: colors.accent, fontWeight: "600" }}>
+                  {`${settings.intervalSeconds}s`}
+                </Text>
+              }
+            />
+            <View style={styles.speedRow}>
+              {[2, 3, 4, 6].map((sec) => (
+                <View
+                  key={sec}
+                  style={[
+                    styles.speedChip,
+                    {
+                      backgroundColor:
+                        settings.intervalSeconds === sec ? colors.accent : colors.surface1,
+                      borderColor:
+                        settings.intervalSeconds === sec ? colors.accent : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    onPress={() => {
+                      triggerHaptic("light");
+                      updateSettings({ intervalSeconds: sec });
+                    }}
+                    style={[
+                      styles.speedChipText,
+                      {
+                        color:
+                          settings.intervalSeconds === sec
+                            ? colors.accentForeground
+                            : colors.foreground,
+                        fontWeight: settings.intervalSeconds === sec ? "700" : "500",
+                      },
+                    ]}
+                  >
+                    {`${sec}s`}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </Card>
+        </>
       )}
 
       {/* Discrete Version Footer */}
@@ -320,14 +559,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
   },
-  emptyContext: {
-    paddingVertical: 28,
+  settingsToggles: {
+    gap: 8,
+  },
+  speedRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  speedChip: {
     paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  contextPlaceholder: {
+  speedChipText: {
     fontSize: 13,
-    textAlign: "center",
   },
 });
