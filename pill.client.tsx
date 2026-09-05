@@ -1352,6 +1352,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    overflow: "hidden",
+    flexShrink: 1,
+    minWidth: 0,
   },
   pillText: {
     fontSize: 11,
@@ -1416,6 +1419,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    overflow: "hidden",
+    flexShrink: 1,
+    minWidth: 0,
   },
   dividerText: {
     fontSize: 10,
