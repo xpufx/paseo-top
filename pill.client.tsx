@@ -75,7 +75,9 @@ function getMetricColors(
 
 function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
   const { colors } = usePluginTheme();
-  const { settings } = usePluginSettings(topSettingsContract);
+  const { settings } = usePluginSettings(topSettingsContract, {
+    refetchInterval: 5000,
+  });
 
   const workspaceName = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.name);
   const agentInfo = useAgent(agentId, (a: PluginAgentSnapshot) => a?.model || a?.provider || a?.title);
