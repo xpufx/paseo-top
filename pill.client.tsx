@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   useWorkspace,
@@ -44,6 +44,18 @@ import { PLUGIN_VERSION } from "./version";
 
 const EMPTY_PARAMS = {};
 
+function formatWorktreeLocation(dir: string | null | undefined): string {
+  if (!dir) return "";
+  // Check for Paseo-managed worktree: ~/.paseo/worktrees/<hash>/<slug>
+  const wtMatch = dir.match(/[/\\]\.paseo[/\\]worktrees[/\\][^/\\]+[/\\]([^/\\]+)$/);
+  if (wtMatch && wtMatch[1]) {
+    return wtMatch[1];
+  }
+  const clean = dir.replace(/[/\\]+$/, "");
+  const segments = clean.split(/[/\\]/);
+  return segments[segments.length - 1] || clean;
+}
+
 const CPU_THRESHOLDS: MetricThresholds = { warning: 60, danger: 85 };
 const MEM_THRESHOLDS: MetricThresholds = { warning: 70, danger: 85 };
 
@@ -79,21 +91,31 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     refetchInterval: 5000,
   });
 
-  const workspaceName = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.name);
+  const workspaceDirectory = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.directory);
   const agentInfo = useAgent(agentId, (a: PluginAgentSnapshot) => a?.model || a?.provider || a?.title);
+
+  const queryParams = useMemo(() => {
+    return workspaceDirectory ? { directory: workspaceDirectory } : EMPTY_PARAMS;
+  }, [workspaceDirectory]);
 
   const { data, isError, isLoading } = useRpcQuery(
     getSystemResourcesRpc,
-    EMPTY_PARAMS,
+    queryParams,
     {
       refetchInterval: 3000,
     },
   );
 
+  const worktreeLocationText = useMemo(
+    () => formatWorktreeLocation(workspaceDirectory),
+    [workspaceDirectory],
+  );
+
   // Collect available items enabled by user settings
-  const items: ("cpu_ram" | "worktree" | "agent" | "load" | "uptime")[] = [];
+  const items: ("cpu_ram" | "branch" | "worktree" | "agent" | "load" | "uptime")[] = [];
   if (settings.showCpuRam && data) items.push("cpu_ram");
-  if (settings.showWorktree && workspaceName) items.push("worktree");
+  if (settings.showBranch && data?.branch) items.push("branch");
+  if (settings.showWorktree && workspaceDirectory) items.push("worktree");
   if (settings.showAgent && agentInfo) items.push("agent");
   if (settings.showLoad && data?.loadAvg?.[0] !== undefined) items.push("load");
   if (settings.showUptime && data?.uptimeSeconds) items.push("uptime");
@@ -131,7 +153,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
   const activeMode = items.length > 0 ? items[currentIndex % items.length] : "cpu_ram";
 
   switch (activeMode) {
-    case "worktree":
+    case "branch":
       return (
         <View style={styles.pillContainer}>
           <Icon name="GitBranch" size={12} color={colors.accent} />
@@ -139,7 +161,20 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
             numberOfLines={1}
             style={[styles.pillText, isOpen && styles.pillTextActive, { color: colors.foreground, fontWeight: "600" }]}
           >
-            {workspaceName}
+            {data.branch}
+          </Text>
+        </View>
+      );
+
+    case "worktree":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="Folder" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[styles.pillText, isOpen && styles.pillTextActive, { color: colors.foreground, fontWeight: "600" }]}
+          >
+            {worktreeLocationText}
           </Text>
         </View>
       );
@@ -226,9 +261,13 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
     cwd: a?.cwd,
   }));
 
+  const queryParams = useMemo(() => {
+    return workspace?.directory ? { directory: workspace.directory } : EMPTY_PARAMS;
+  }, [workspace?.directory]);
+
   const { data, isError, error, isLoading, isRefetching, refetch } = useAutoRefreshQuery(
     getSystemResourcesRpc,
-    EMPTY_PARAMS,
+    queryParams,
     {
       defaultRate: "2s",
       isOpen: true,
@@ -377,14 +416,17 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
               }
             />
             <KeyValueGroup columns={2}>
-              <KeyValue label="Worktree / Branch" value={workspace?.name || "Unknown"} />
+              <KeyValue label="Git Branch" value={data?.branch || "Unknown"} />
               <KeyValue label="Kind" value={workspace?.kind || "Unknown"} />
             </KeyValueGroup>
+            {workspace?.directory ? (
+              <KeyValue label="Worktree Location" value={workspace.directory} copyable mono />
+            ) : null}
+            {workspace?.name ? (
+              <KeyValue label="Workspace Title" value={workspace.name} />
+            ) : null}
             {workspace?.projectDisplayName ? (
               <KeyValue label="Project" value={workspace.projectDisplayName} />
-            ) : null}
-            {workspace?.directory ? (
-              <KeyValue label="Directory" value={workspace.directory} copyable mono />
             ) : null}
             {workspace?.diffStat ? (
               <KeyValue
@@ -436,8 +478,14 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
                 onValueChange={(val) => updateSettings({ showCpuRam: val })}
               />
               <Toggle
-                label="Worktree / Branch"
-                description="Active worktree or git branch name"
+                label="Git Branch"
+                description="Active git branch name (e.g. main, feat/auth)"
+                value={settings.showBranch}
+                onValueChange={(val) => updateSettings({ showBranch: val })}
+              />
+              <Toggle
+                label="Worktree Location"
+                description="Active workspace or worktree folder path"
                 value={settings.showWorktree}
                 onValueChange={(val) => updateSettings({ showWorktree: val })}
               />

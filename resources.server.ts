@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import path from "node:path";
+import child_process from "node:child_process";
 import os from "node:os";
 import {
   getSystemMetrics,
@@ -39,7 +41,58 @@ export async function handleResetSettings(): Promise<TopSettings> {
   return topSettingsContract.defaultSettings;
 }
 
-export async function handleGetSystemResources(): Promise<SystemResources> {
+export function resolveGitBranch(dir?: string | null): string | null {
+  if (!dir || typeof dir !== "string") return null;
+  try {
+    const gitPath = path.join(dir, ".git");
+    if (!fs.existsSync(gitPath)) return null;
+
+    let headFile: string | null = null;
+    const stat = fs.statSync(gitPath);
+    if (stat.isDirectory()) {
+      headFile = path.join(gitPath, "HEAD");
+    } else if (stat.isFile()) {
+      // Worktree pointer file: "gitdir: <path>"
+      const content = fs.readFileSync(gitPath, "utf8").trim();
+      const match = content.match(/^gitdir:\s*(.+)$/m);
+      if (match && match[1]) {
+        const gitDir = path.resolve(dir, match[1]);
+        headFile = path.join(gitDir, "HEAD");
+      }
+    }
+
+    if (headFile && fs.existsSync(headFile)) {
+      const headContent = fs.readFileSync(headFile, "utf8").trim();
+      const branchMatch = headContent.match(/^ref:\s*refs\/heads\/(.+)$/);
+      if (branchMatch && branchMatch[1]) {
+        return branchMatch[1];
+      }
+      if (/^[0-9a-f]{7,40}$/i.test(headContent)) {
+        return headContent.slice(0, 7);
+      }
+    }
+  } catch {
+    // Ignore and fall through to git command
+  }
+
+  try {
+    const branch = child_process
+      .execSync("git rev-parse --abbrev-ref HEAD", {
+        cwd: dir,
+        timeout: 1500,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+      .trim();
+    return branch && branch !== "HEAD" ? branch : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function handleGetSystemResources(input?: {
+  directory?: string;
+}): Promise<SystemResources> {
   const metrics = getSystemMetrics();
 
   let usedMem = metrics.memory.usedBytes;
@@ -64,6 +117,8 @@ export async function handleGetSystemResources(): Promise<SystemResources> {
     log.warn("Memory threshold critical", { usedPercent: memoryUsedPercent });
   }
 
+  const branch = resolveGitBranch(input?.directory);
+
   return {
     version: PLUGIN_VERSION,
     hostname: metrics.hostname,
@@ -77,5 +132,6 @@ export async function handleGetSystemResources(): Promise<SystemResources> {
     memoryUsedPercent,
     loadAvg: metrics.cpu.loadAverage,
     uptimeSeconds: metrics.uptimeSeconds,
+    branch,
   };
 }

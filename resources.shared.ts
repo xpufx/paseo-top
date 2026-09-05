@@ -4,7 +4,11 @@ import { z } from "zod";
 export const getSystemResourcesRpc = defineContract({
   name: "system-resources.get",
   description: "Retrieve real-time host system resource metrics (CPU, RAM, load, uptime)",
-  input: z.object({}),
+  input: z
+    .object({
+      directory: z.string().optional(),
+    })
+    .default({}),
   output: z.object({
     version: z.string(),
     hostname: z.string(),
@@ -18,6 +22,7 @@ export const getSystemResourcesRpc = defineContract({
     memoryUsedPercent: z.number(),
     loadAvg: z.array(z.number()),
     uptimeSeconds: z.number(),
+    branch: z.string().nullable().optional(),
   }),
 });
 
@@ -25,6 +30,7 @@ export type SystemResources = RpcOutput<typeof getSystemResourcesRpc>;
 
 export const TopSettingsSchema = z.object({
   showCpuRam: z.boolean().default(true),
+  showBranch: z.boolean().default(true),
   showWorktree: z.boolean().default(true),
   showAgent: z.boolean().default(false),
   showLoad: z.boolean().default(false),
