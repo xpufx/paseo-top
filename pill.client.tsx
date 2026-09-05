@@ -62,7 +62,7 @@ const MEM_THRESHOLDS: MetricThresholds = { warning: 70, danger: 85 };
 const TABS = [
   { id: "system", label: "System", shortLabel: "System", icon: "Activity" },
   { id: "context", label: "Workspace", shortLabel: "Workspace", icon: "GitBranch" },
-  { id: "settings", label: "Pill Display", shortLabel: "Pill", icon: "Sliders" },
+  { id: "settings", label: "Settings", shortLabel: "Settings", icon: "Sliders" },
 ];
 
 function getMetricColors(
