@@ -88,6 +88,22 @@ function formatIdleDuration(isoString: string | null | undefined): string {
   return `${days}d ${hours % 24}h`;
 }
 
+function formatIdlePill(status: string | undefined, isoString: string | null | undefined): string {
+  if (status === "running") return "active";
+  if (!isoString) return status || "--";
+  const time = new Date(isoString).getTime();
+  if (isNaN(time)) return "--";
+  const diffMs = Math.max(0, Date.now() - time);
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 60) return `idle ${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `idle ${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `idle ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `idle ${days}d`;
+}
+
 const CPU_THRESHOLDS: MetricThresholds = { warning: 60, danger: 85 };
 const MEM_THRESHOLDS: MetricThresholds = { warning: 70, danger: 85 };
 
@@ -128,7 +144,13 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
   });
 
   const workspaceDirectory = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.directory);
-  const agentInfo = useAgent(agentId, (a: PluginAgentSnapshot) => a?.title || a?.model || a?.provider);
+  const agent = useAgent(agentId, (a: PluginAgentSnapshot) => ({
+    title: a?.title,
+    model: a?.model,
+    provider: a?.provider,
+    status: a?.status,
+    lastActivityAt: a?.lastActivityAt,
+  }));
 
   const neededFields = useMemo(() => {
     const fields: ResourceField[] = [];
@@ -171,11 +193,24 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
   );
 
   // Collect available items enabled by user settings
-  const items: ("cpu_ram" | "branch" | "worktree" | "agent" | "load" | "uptime")[] = [];
+  const items: (
+    | "cpu_ram"
+    | "branch"
+    | "worktree"
+    | "agent_title"
+    | "agent"
+    | "agent_provider"
+    | "agent_activity"
+    | "load"
+    | "uptime"
+  )[] = [];
   if (settings.showCpuRam && data?.cpuUsagePercent !== undefined) items.push("cpu_ram");
   if (settings.showBranch && data?.branch) items.push("branch");
   if (settings.showWorktree && workspaceDirectory) items.push("worktree");
-  if (settings.showAgent && agentInfo) items.push("agent");
+  if (settings.showAgentTitle && agent?.title) items.push("agent_title");
+  if (settings.showAgent && (agent?.model || agent?.provider)) items.push("agent");
+  if (settings.showAgentProvider && agent?.provider) items.push("agent_provider");
+  if (settings.showAgentActivity && (agent?.lastActivityAt || agent?.status)) items.push("agent_activity");
   if (settings.showLoad && data?.loadAvg?.[0] !== undefined) items.push("load");
   if (settings.showUptime && data?.uptimeSeconds) items.push("uptime");
 
@@ -246,7 +281,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
         </View>
       );
 
-    case "agent":
+    case "agent_title":
       return (
         <View style={styles.pillContainer}>
           <Icon name="Bot" size={12} color={colors.accent} />
@@ -254,10 +289,60 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
             numberOfLines={1}
             style={[styles.pillText, isOpen && styles.pillTextActive, { color: colors.foreground, fontWeight: "600" }]}
           >
-            {agentInfo}
+            {agent?.title ?? "Agent"}
           </Text>
         </View>
       );
+
+    case "agent":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="Cpu" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[styles.pillText, isOpen && styles.pillTextActive, { color: colors.foreground, fontWeight: "600" }]}
+          >
+            {agent?.model || agent?.provider || "Agent"}
+          </Text>
+        </View>
+      );
+
+    case "agent_provider":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="Sparkles" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[styles.pillText, isOpen && styles.pillTextActive, { color: colors.foreground, fontWeight: "600" }]}
+          >
+            {agent?.provider ?? "Provider"}
+          </Text>
+        </View>
+      );
+
+    case "agent_activity": {
+      const isRunning = agent?.status === "running";
+      const activityText = formatIdlePill(agent?.status, agent?.lastActivityAt);
+      return (
+        <View style={styles.pillContainer}>
+          <Icon
+            name={isRunning ? "Activity" : "Clock"}
+            size={12}
+            color={isRunning ? colors.statusSuccess : colors.foregroundMuted}
+          />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.pillText,
+              isOpen && styles.pillTextActive,
+              { color: isRunning ? colors.statusSuccess : colors.foreground, fontWeight: "600" },
+            ]}
+          >
+            {activityText}
+          </Text>
+        </View>
+      );
+    }
 
     case "load":
       return (
@@ -596,10 +681,28 @@ function ResourceModal({ theme, workspaceId, agentId }: RenderModalProps) {
                 onValueChange={(val) => updateSettings({ showWorktree: val })}
               />
               <Toggle
-                label="Agent / Model"
-                description="Active agent tab title or model name"
+                label="Agent Tab Title"
+                description="Active agent session title (e.g. Research architecture)"
+                value={settings.showAgentTitle}
+                onValueChange={(val) => updateSettings({ showAgentTitle: val })}
+              />
+              <Toggle
+                label="Agent Model"
+                description="Active LLM model name (e.g. claude-3-7-sonnet)"
                 value={settings.showAgent}
                 onValueChange={(val) => updateSettings({ showAgent: val })}
+              />
+              <Toggle
+                label="Agent Provider"
+                description="LLM provider name (e.g. anthropic, openai)"
+                value={settings.showAgentProvider}
+                onValueChange={(val) => updateSettings({ showAgentProvider: val })}
+              />
+              <Toggle
+                label="Agent Activity / Idle"
+                description="Current status or inactivity duration (e.g. active, idle 4m)"
+                value={settings.showAgentActivity}
+                onValueChange={(val) => updateSettings({ showAgentActivity: val })}
               />
               <Toggle
                 label="System Load"

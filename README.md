@@ -25,7 +25,8 @@ Displays real-time system performance alongside your active Git branch and workt
   - **System**: Circular arc gauges, CPU meters, memory breakdown, load averages, and host specs.
   - **Workspace**: Branch, worktree path, diff statistics, and agent session status.
   - **Settings**: Info toggle switches, rotation interval controls, and default tab selection.
-- **Customizable Pill Info**: Choose exactly which items rotate in the composer pill (CPU & RAM, Git Branch, Worktree Location, Agent Model, System Load, Host Uptime).
+- **Customizable Pill Info**: Choose exactly which items rotate in the composer pill (CPU & RAM, Git Branch, Worktree Location, Agent Tab Title, Model, Provider, Inactivity / Idle Time, System Load, Host Uptime).
+- **Zero-Poll Efficiency**: Selectively queries only active metrics from the host; pauses background RPC polling entirely when displaying purely client-side session context.
 - **Configurable Rotation Speed**: Set cycle intervals to 2s, 3s, 4s, or 6s.
 - **Default Modal Tab Preference**: Choose which tab opens first when clicking the pill (System, Workspace, or Settings).
 - **Automatic Cross-Device Sync**: Settings persist daemon-side and automatically synchronize across desktop, mobile, and web clients.
