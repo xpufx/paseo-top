@@ -1,7 +1,7 @@
 # paseo-top
 
 <p align="center">
-  <img src="screenshots/pill.png" alt="Paseo Top Composer Pill" />
+  <img src="screenshots/paseo-top-pill.png" alt="Paseo Top Composer Pill" />
 </p>
 
 <p align="center">
