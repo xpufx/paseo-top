@@ -16,18 +16,22 @@ Displays real-time system performance alongside your active Git branch and workt
 
 ## Features
 
-- **Alternating Composer Pill**: Smoothly cycles through enabled system metrics and workspace info right above the prompt input.
+- **Three Pill Display Modes**:
+  - **Cycle**: Smoothly rotates through enabled system metrics and workspace info one at a time right above the prompt input.
+  - **All in One**: Combines all enabled metrics simultaneously into a single, compact composer pill separated by subtle dividers (`0.5% · 5.0G │ main │ paseo-top`).
+  - **Multiple Pills**: Spawns a dedicated native composer pill for every single enabled switch (`[ 0.5% · 5.0G ] [ main ] [ paseo-top ]`). Tapping any dedicated pill opens the modal focused directly on its corresponding tab (`System` or `Workspace Context`).
 - **Git Branch & Worktree Awareness**: Displays the active Git branch and worktree directory so you always know where your agent is operating.
 - **Real-Time System Metrics**: Live CPU usage, RAM utilization, 1/5/15-minute load averages, and host uptime.
 - **Color-Coded Status Thresholds**: Clear visual indicators for normal, elevated, and critical system load.
-- **Full Workspace & Agent Context**: Inspect active branch, worktree filesystem path (with 1-tap copy), workspace title, project name, uncommitted git changes (`+diff / -diff`), and current agent model.
+- **Full Workspace & Agent Context**: Inspect active branch, worktree filesystem path (with 1-tap copy), workspace title, project name, uncommitted git changes (`+diff / -diff`), and current agent model, provider, and idle duration.
 - **Multi-Tab Modal**:
   - **System**: Circular arc gauges, CPU meters, memory breakdown, load averages, and host specs.
   - **Workspace**: Branch, worktree path, diff statistics, and agent session status.
-  - **Settings**: Info toggle switches, rotation interval controls, and default tab selection.
-- **Customizable Pill Info**: Choose exactly which items rotate in the composer pill (CPU & RAM, Git Branch, Worktree Location, Agent Tab Title, Model, Provider, Inactivity / Idle Time, System Load, Host Uptime).
-- **Zero-Poll Efficiency**: Selectively queries only active metrics from the host; pauses background RPC polling entirely when displaying purely client-side session context.
-- **Configurable Rotation Speed**: Set cycle intervals to 2s, 3s, 4s, or 6s.
+  - **Settings**: Pill display mode selector, active item toggles, rotation speed, and default tab selection.
+- **Customizable Pill Info**: Choose exactly which items appear across 9 distinct metrics (CPU & RAM, Git Branch, Worktree Location, Agent Tab Title, Model, Provider, Inactivity / Idle Time, System Load, Host Uptime).
+- **Fail-Safe Fallback**: If all pill switches are turned off, the pill automatically falls back to displaying CPU & RAM in-memory so the modal can always be launched.
+- **Zero-Poll Efficiency**: Selectively queries only active metrics from the host; in Multiple Pills mode, each individual pill only polls the specific fields it requires.
+- **Configurable Rotation Speed**: Set cycle intervals to 2s, 3s, 4s, or 6s (dynamically shown in Cycle mode).
 - **Default Modal Tab Preference**: Choose which tab opens first when clicking the pill (System, Workspace, or Settings).
 - **Automatic Cross-Device Sync**: Settings persist daemon-side and automatically synchronize across desktop, mobile, and web clients.
 - **1-Tap Clipboard Copy**: Quick-copy paths, hostnames, and metadata with instant confirmation toasts.
