@@ -1,7 +1,7 @@
 {
   "name": "top",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "scripts": {
     "build": "node -e \"import('paseo-plugin-helper/server').then(m => m.stampVersion())\"",
     "pretypecheck": "npm run build",
