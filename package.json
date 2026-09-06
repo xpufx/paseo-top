@@ -1,11 +1,18 @@
 {
   "name": "top",
-  "private": true,
+  "description": "Live host system resource monitor for Paseo",
   "version": "0.2.0",
+  "author": "xpufx",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xpufx/paseo-top.git"
+  },
   "scripts": {
     "build": "node -e \"import('paseo-plugin-helper/server').then(m => m.stampVersion())\"",
     "pretypecheck": "npm run build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.7.2",
