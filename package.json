@@ -1,7 +1,7 @@
 {
   "name": "top",
   "description": "Live host system resource monitor for Paseo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "xpufx",
   "license": "MIT",
   "repository": {
