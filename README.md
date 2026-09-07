@@ -27,6 +27,11 @@ Displays real-time system performance alongside your active Git branch and workt
   - Zero-probe efficiency: reads snapshots persisted by `paseo-mcp-tools` via `PluginStorage` without spawning child processes.
   - Full server-by-server status and latency breakdown in the System modal tab.
   - Automatically detects if `mcp-tools` plugin is running/enabled or uninstalled via `paseo-plugin-helper/server`.
+- **Declarative Custom Metric Pills**:
+  - Define custom shell command pills with zero TypeScript or React code by dropping `.json` or `.jsonc` files into `~/.paseo/top/pills/`.
+  - Automatic poller with timeout protection, threshold evaluation (`warning`, `danger`, `invert`), and live badge color states.
+  - Dedicated drilldown modal views with built-in monospace `<CodeBlock>`, copy button, and on-demand refresh command execution.
+  - Live discovery: newly created or updated pill files are detected automatically without restarting Paseo.
 - **Color-Coded Status Thresholds**: Clear visual indicators for normal, elevated, and critical system load.
 - **Full Workspace & Agent Context**: Inspect active branch, worktree filesystem path (with 1-tap copy), workspace title, project name, uncommitted git changes (`+diff / -diff`), and current agent model, provider, and idle duration.
 - **Multi-Tab Modal**:
@@ -41,6 +46,74 @@ Displays real-time system performance alongside your active Git branch and workt
 - **Default Modal Tab Preference**: Choose which tab opens first when clicking the pill (System, Workspace, Settings, or About).
 - **Automatic Cross-Device Sync**: Settings persist daemon-side and automatically synchronize across desktop, mobile, and web clients.
 - **1-Tap Clipboard Copy**: Quick-copy paths, hostnames, and metadata with instant confirmation toasts.
+
+## Custom Metric Pills
+
+Extend `paseo-top` with user-defined metric pills by creating declarative JSON or JSONC configuration files in `~/.paseo/top/pills/`.
+
+Every configuration file in `~/.paseo/top/pills/` generates an active pill in Paseo's composer trackbar, backed by background polling and an on-demand drilldown modal.
+
+### Example 1: GPU Utilization (NVIDIA)
+
+Create `~/.paseo/top/pills/gpu.jsonc`:
+
+```jsonc
+{
+  "id": "gpu-util",
+  "title": "GPU",
+  "compactTitle": "GPU",
+  "icon": "Cpu",
+  "command": "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits",
+  "suffix": "%",
+  "intervalMs": 3000,
+  "timeoutMs": 2000,
+  "thresholds": {
+    "warning": 70,
+    "danger": 90
+  },
+  "modal": {
+    "title": "GPU Vitals & Memory",
+    "description": "Live status from nvidia-smi",
+    "command": "nvidia-smi",
+    "preformatted": true
+  }
+}
+```
+
+### Example 2: Active Docker Containers
+
+Create `~/.paseo/top/pills/docker.jsonc`:
+
+```jsonc
+{
+  "id": "docker-containers",
+  "title": "Docker",
+  "icon": "Box",
+  "command": "docker ps -q 2>/dev/null | wc -l",
+  "suffix": " running",
+  "intervalMs": 5000,
+  "modal": {
+    "title": "Running Docker Containers",
+    "command": "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+  }
+}
+```
+
+### Configuration Options
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `string` | Unique identifier for the pill (e.g. `gpu-util`). |
+| `title` | `string` | Label displayed in standard composer trackbar. |
+| `compactTitle` | `string?` | Optional shorter title shown when screen is narrow or on mobile. |
+| `icon` | `string?` | Lucide icon name (e.g. `Cpu`, `Box`, `Activity`, `HardDrive`). |
+| `command` | `string` | Shell command executed periodically to get the metric value. |
+| `prefix` / `suffix` | `string?` | Optional strings prepended or appended to the formatted output (e.g. `%`, ` running`). |
+| `intervalMs` | `number?` | Polling interval in milliseconds (default: `5000`). |
+| `timeoutMs` | `number?` | Execution timeout in milliseconds (default: `5000`). |
+| `thresholds` | `object?` | Numeric thresholds for color styling: `warning`, `danger`, and `invert` (for metrics like battery where lower is worse). |
+| `modal` | `object?` | Detailed drilldown modal options: `title`, `description`, and `command` (run on demand when opened or refreshed). |
+| `enabled` | `boolean?` | Enable or disable the pill without deleting the file (default: `true`). |
 
 ## Installation
 

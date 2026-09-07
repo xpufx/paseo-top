@@ -21,6 +21,8 @@ import {
   Badge,
   Icon,
   AboutSection,
+  CustomPillBody,
+  CustomPillModalContent,
   useRpcQuery,
   useAutoRefreshQuery,
   usePluginSettings,
@@ -35,10 +37,13 @@ import {
   formatUptime,
   resolveMetricStatus,
   type MetricThresholds,
+  type CustomPillState,
 } from "paseo-plugin-helper/shared";
 import {
   getSystemResourcesRpc,
   topSettingsContract,
+  getCustomPillsRpc,
+  runCustomPillModalCommandRpc,
   type SystemResources,
   type ResourceField,
   type TopSettings,
@@ -1006,6 +1011,33 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               )}
             </Card>
           )}
+
+          {/* Custom Metric Pills Card */}
+          {Boolean(data.customPills && data.customPills.length > 0) && (
+            <Card variant="elevated">
+              <Card.Header
+                title="Custom Metric Pills"
+                subtitle="Discovered from ~/.paseo/top/pills"
+                icon="Sliders"
+                value={
+                  <Badge
+                    label={`${data.customPills?.length ?? 0} active`}
+                    variant="accent"
+                  />
+                }
+              />
+              <KeyValueGroup columns={data.customPills!.length > 1 ? 2 : 1}>
+                {data.customPills!.map((cp) => (
+                  <KeyValue
+                    key={cp.id}
+                    label={cp.title}
+                    value={cp.displayValue}
+                    subValue={cp.status !== "neutral" ? `(${cp.status})` : undefined}
+                  />
+                ))}
+              </KeyValueGroup>
+            </Card>
+          )}
         </>
       )}
 
@@ -1433,6 +1465,56 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
   );
 }
 
+interface LiveCustomPillViewProps {
+  pillId: string;
+  initial: CustomPillState;
+}
+
+function LiveCustomPillView({ pillId, initial }: LiveCustomPillViewProps) {
+  const { data } = useRpcQuery(getCustomPillsRpc, EMPTY_PARAMS, { refetchInterval: 3000 });
+  const liveState = data?.pills.find((p) => p.id === pillId) ?? initial;
+  return <CustomPillBody state={liveState} />;
+}
+
+interface LiveCustomPillModalProps {
+  pillId: string;
+  initial: CustomPillState;
+  client: PluginClientContext;
+}
+
+function LiveCustomPillModal({ pillId, initial, client }: LiveCustomPillModalProps) {
+  const [refreshing, setRefreshing] = useState(false);
+  const [outputOverride, setOutputOverride] = useState<string | undefined>(undefined);
+  const { data, refetch } = useRpcQuery(getCustomPillsRpc, EMPTY_PARAMS, { refetchInterval: 3000 });
+  const liveState = data?.pills.find((p) => p.id === pillId) ?? initial;
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await client.rpc(runCustomPillModalCommandRpc, { pillId });
+      if (res?.output) {
+        setOutputOverride(res.output);
+      }
+      void refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const effectiveState: CustomPillState = {
+    ...liveState,
+    modalOutput: outputOverride ?? liveState.modalOutput,
+  };
+
+  return (
+    <CustomPillModalContent
+      state={effectiveState}
+      onRefresh={handleRefresh}
+      isRefreshing={refreshing}
+    />
+  );
+}
+
 export function contributeClient(client: PluginClientContext) {
   const activePills = new Map<string, () => void>();
   let latestSettings: TopSettings = topSettingsContract.defaultSettings;
@@ -1641,12 +1723,60 @@ export function contributeClient(client: PluginClientContext) {
       // Ignore initial get errors
     });
 
+  // Dynamic discovery and lifecycle management for user custom metric pills
+  const activeCustomPills = new Map<string, () => void>();
+
+  async function syncCustomPills() {
+    try {
+      const res = await client.rpc(getCustomPillsRpc, EMPTY_PARAMS);
+      const pills = res?.pills ?? [];
+      const pillIds = new Set(pills.map((p) => p.id));
+
+      // Remove pills that are no longer configured
+      for (const [id, cleanup] of activeCustomPills.entries()) {
+        if (!pillIds.has(id)) {
+          cleanup();
+          activeCustomPills.delete(id);
+        }
+      }
+
+      // Register newly discovered custom metric pills
+      for (const pill of pills) {
+        if (!activeCustomPills.has(pill.id)) {
+          const cleanup = registerComposerPill(client, {
+            id: `top-custom-${pill.id}`,
+            title: pill.title,
+            compactTitle: pill.compactTitle,
+            icon: pill.icon,
+            compactIcon: pill.compactIcon,
+            modalTitle: pill.modalTitle ?? pill.title,
+            renderPill: () => <LiveCustomPillView pillId={pill.id} initial={pill} />,
+            renderModal: () => (
+              <LiveCustomPillModal pillId={pill.id} initial={pill} client={client} />
+            ),
+          });
+          activeCustomPills.set(pill.id, cleanup);
+        }
+      }
+    } catch {
+      // Ignore initial get errors
+    }
+  }
+
+  void syncCustomPills();
+  const customPillInterval = setInterval(syncCustomPills, 5000);
+
   return () => {
+    clearInterval(customPillInterval);
     settingsListeners.delete(syncPills);
     for (const cleanup of activePills.values()) {
       cleanup();
     }
     activePills.clear();
+    for (const cleanup of activeCustomPills.values()) {
+      cleanup();
+    }
+    activeCustomPills.clear();
   };
 }
 

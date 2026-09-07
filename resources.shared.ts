@@ -1,5 +1,12 @@
-import { defineContract, defineSettingsContract, type RpcOutput } from "paseo-plugin-helper/shared";
+import {
+  defineContract,
+  defineSettingsContract,
+  type RpcOutput,
+  type CustomPillState,
+} from "paseo-plugin-helper/shared";
 import { z } from "zod";
+
+export type { CustomPillState };
 
 export const ResourceFieldSchema = z.enum(["cpu", "memory", "load", "uptime", "branch", "mcp"]);
 export type ResourceField = z.infer<typeof ResourceFieldSchema>;
@@ -31,6 +38,47 @@ export const McpResourceStatusSchema = z.object({
 });
 export type McpResourceStatus = z.infer<typeof McpResourceStatusSchema>;
 
+export const CustomPillStateSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  compactTitle: z.string().optional(),
+  icon: z.string().optional(),
+  compactIcon: z.string().optional(),
+  rawValue: z.string(),
+  displayValue: z.string(),
+  numericValue: z.number().optional(),
+  status: z.enum(["neutral", "success", "warning", "danger", "accent", "info"]),
+  lastUpdated: z.number(),
+  error: z.string().optional(),
+  modalTitle: z.string().optional(),
+  modalDescription: z.string().optional(),
+  modalOutput: z.string().optional(),
+  modalError: z.string().optional(),
+  modalLastUpdated: z.number().optional(),
+});
+export type CustomPillStateOutput = z.infer<typeof CustomPillStateSchema>;
+
+export const getCustomPillsRpc = defineContract({
+  name: "top.custom-pills.get",
+  description: "Retrieve live states of all discovered custom metric pills",
+  input: z.object({}).default({}),
+  output: z.object({
+    pills: z.array(CustomPillStateSchema),
+  }),
+});
+
+export const runCustomPillModalCommandRpc = defineContract({
+  name: "top.custom-pills.modal-command",
+  description: "Execute the on-demand drilldown command for a custom metric pill",
+  input: z.object({
+    pillId: z.string(),
+  }),
+  output: z.object({
+    output: z.string().optional(),
+    error: z.string().optional(),
+  }),
+});
+
 export const getSystemResourcesRpc = defineContract({
   name: "system-resources.get",
   description: "Retrieve real-time host system resource metrics (CPU, RAM, load, uptime)",
@@ -56,6 +104,7 @@ export const getSystemResourcesRpc = defineContract({
     branch: z.string().nullable().optional(),
     mcp: McpResourceStatusSchema.nullable().optional(),
     mcpInstalled: z.boolean().optional(),
+    customPills: z.array(CustomPillStateSchema).optional(),
   }),
 });
 

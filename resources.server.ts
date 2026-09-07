@@ -8,6 +8,8 @@ import {
   PluginStorage,
   isPluginInstalled,
   isPluginRunning,
+  CustomPillPoller,
+  discoverCustomPillConfigs,
 } from "paseo-plugin-helper/server";
 import {
   type SystemResources,
@@ -16,12 +18,60 @@ import {
   type ResourceField,
   type McpResourceStatus,
   type McpStatusSnapshot,
+  type CustomPillState,
 } from "./resources.shared";
 import { PLUGIN_VERSION } from "./version";
 
 export const log = createPluginLogger("top", { version: PLUGIN_VERSION });
 
 log.info("Initialized host system resources monitor", { version: PLUGIN_VERSION });
+
+const CUSTOM_PILLS_DIR = path.join(os.homedir(), ".paseo", "top", "pills");
+
+try {
+  if (!fs.existsSync(CUSTOM_PILLS_DIR)) {
+    fs.mkdirSync(CUSTOM_PILLS_DIR, { recursive: true });
+    log.info("Created custom pills directory", { path: CUSTOM_PILLS_DIR });
+  }
+} catch (err) {
+  log.warn("Failed to ensure custom pills directory", {
+    error: err instanceof Error ? err.message : String(err),
+  });
+}
+
+export const customPillPoller = new CustomPillPoller({
+  configDir: CUSTOM_PILLS_DIR,
+  logger: log,
+});
+
+// Start polling discovered pills on server initialization
+void customPillPoller.start();
+
+let lastDiscoveredMtime = 0;
+
+export async function refreshCustomPillConfigs(): Promise<void> {
+  try {
+    const stat = await fs.promises.stat(CUSTOM_PILLS_DIR);
+    if (stat.mtimeMs !== lastDiscoveredMtime) {
+      lastDiscoveredMtime = stat.mtimeMs;
+      const discovered = await discoverCustomPillConfigs(CUSTOM_PILLS_DIR, log);
+      customPillPoller.updatePills(discovered);
+    }
+  } catch {
+    // Directory might be temporarily inaccessible
+  }
+}
+
+export async function handleGetCustomPills(): Promise<{ pills: CustomPillState[] }> {
+  await refreshCustomPillConfigs();
+  return { pills: customPillPoller.getAllStates() };
+}
+
+export async function handleRunCustomPillModalCommand(input: {
+  pillId: string;
+}): Promise<{ output?: string; error?: string }> {
+  return customPillPoller.runModalCommand(input.pillId);
+}
 
 const settingsStorage = new PluginStorage<TopSettings>("top", "settings.json", {
   schema: topSettingsContract.schema,
@@ -221,5 +271,6 @@ export async function handleGetSystemResources(input?: {
     branch,
     mcp,
     mcpInstalled,
+    customPills: customPillPoller.getAllStates(),
   };
 }
