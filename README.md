@@ -22,14 +22,19 @@ Displays real-time system performance alongside your active Git branch and workt
   - **Multiple Pills**: Spawns a dedicated native composer pill for every single enabled switch (`[ 0.5% · 5.0G ] [ main ] [ paseo-top ]`). Tapping any dedicated pill opens the modal focused directly on its corresponding tab (`System` or `Workspace Context`).
 - **Git Branch & Worktree Awareness**: Displays the active Git branch and worktree directory so you always know where your agent is operating.
 - **Real-Time System Metrics**: Live CPU usage, RAM utilization, 1/5/15-minute load averages, and host uptime.
+- **MCP Server Health Monitoring**:
+  - Displays live count of healthy vs total MCP servers in the composer pill (`● 4/4 MCP`).
+  - Zero-probe efficiency: reads snapshots persisted by `paseo-mcp-tools` via `PluginStorage` without spawning child processes.
+  - Full server-by-server status and latency breakdown in the System modal tab.
+  - Automatically detects if `mcp-tools` plugin is running/enabled or uninstalled via `paseo-plugin-helper/server`.
 - **Color-Coded Status Thresholds**: Clear visual indicators for normal, elevated, and critical system load.
 - **Full Workspace & Agent Context**: Inspect active branch, worktree filesystem path (with 1-tap copy), workspace title, project name, uncommitted git changes (`+diff / -diff`), and current agent model, provider, and idle duration.
 - **Multi-Tab Modal**:
-  - **System**: Circular arc gauges, CPU meters, memory breakdown, load averages, and host specs.
+  - **System**: Circular arc gauges, CPU meters, memory breakdown, load averages, host specs, and MCP server health card.
   - **Workspace**: Branch, worktree path, diff statistics, and agent session status.
   - **Settings**: Pill display mode selector, active item toggles, rotation speed, and default tab selection.
   - **About**: Plugin branding, author info, repository & issue links, runtime environment details, and one-click diagnostics copy.
-- **Customizable Pill Info**: Choose exactly which items appear across 9 distinct metrics (CPU & RAM, Git Branch, Worktree Location, Agent Tab Title, Model, Provider, Inactivity / Idle Time, System Load, Host Uptime).
+- **Customizable Pill Info**: Choose exactly which items appear across 10 distinct metrics (CPU & RAM, Git Branch, Worktree Location, Agent Tab Title, Model, Provider, Inactivity / Idle Time, System Load, Host Uptime, MCP Server Health).
 - **Fail-Safe Fallback**: If all pill switches are turned off, the pill automatically falls back to displaying CPU & RAM in-memory so the modal can always be launched.
 - **Zero-Poll Efficiency**: Selectively queries only active metrics from the host; in Multiple Pills mode, each individual pill only polls the specific fields it requires.
 - **Configurable Rotation Speed**: Set cycle intervals to 2s, 3s, 4s, or 6s (dynamically shown in Cycle mode).
