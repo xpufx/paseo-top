@@ -40,6 +40,7 @@ export type McpResourceStatus = z.infer<typeof McpResourceStatusSchema>;
 
 export const CustomPillStateSchema = z.object({
   id: z.string(),
+  sourceFile: z.string().optional(),
   title: z.string(),
   compactTitle: z.string().optional(),
   icon: z.string().optional(),
@@ -76,6 +77,23 @@ export const runCustomPillModalCommandRpc = defineContract({
   output: z.object({
     output: z.string().optional(),
     error: z.string().optional(),
+  }),
+});
+
+export const CustomPillDefinitionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  sourceFile: z.string().optional(),
+  enabled: z.boolean().default(true),
+});
+export type CustomPillDefinition = z.infer<typeof CustomPillDefinitionSchema>;
+
+export const listCustomPillsRpc = defineContract({
+  name: "top.custom-pills.list",
+  description: "List all discovered custom metric pill definitions",
+  input: z.object({}).default({}),
+  output: z.object({
+    pills: z.array(CustomPillDefinitionSchema),
   }),
 });
 
@@ -126,6 +144,8 @@ export const TopSettingsSchema = z.object({
   showUptime: z.boolean().default(false),
   showMcp: z.boolean().default(true),
   mcp: z.boolean().default(true),
+  showCustomPills: z.boolean().default(true),
+  customPillEnabled: z.record(z.string(), z.boolean()).default({}),
   intervalSeconds: z.number().min(1).max(60).default(3),
   defaultTab: z.enum(["system", "context", "settings", "about"]).default("system"),
 });
