@@ -1,0 +1,23 @@
+// Laptop Battery Level (Linux sysfs)
+// Drop into ~/.paseo/top/pills/ to enable
+{
+  "id": "battery",
+  "title": "Battery",
+  "compactTitle": "Bat",
+  "icon": "Battery",
+  "command": "cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -n 1",
+  "suffix": "%",
+  "intervalMs": 10000,
+  "timeoutMs": 2000,
+  "thresholds": {
+    "warning": 25,
+    "danger": 10,
+    "invert": true
+  },
+  "modal": {
+    "title": "Battery & Power Subsystem",
+    "description": "Kernel power supply status",
+    "command": "cat /sys/class/power_supply/BAT*/uevent 2>/dev/null",
+    "preformatted": true
+  }
+}

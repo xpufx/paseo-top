@@ -33,6 +33,82 @@ try {
     fs.mkdirSync(CUSTOM_PILLS_DIR, { recursive: true });
     log.info("Created custom pills directory", { path: CUSTOM_PILLS_DIR });
   }
+
+  const existingFiles = fs.readdirSync(CUSTOM_PILLS_DIR);
+  if (existingFiles.length === 0) {
+    const seedTemplates: Record<string, string> = {
+      "disk-usage.jsonc.example": `// Free disk space on root partition
+// Rename to disk-usage.jsonc to enable
+{
+  "id": "root-disk",
+  "title": "Disk",
+  "compactTitle": "Disk",
+  "icon": "HardDrive",
+  "command": "df -h / | awk 'NR==2 {print $4}'",
+  "suffix": " free",
+  "intervalMs": 10000,
+  "timeoutMs": 3000,
+  "modal": {
+    "title": "Filesystem Disk Space",
+    "description": "Output of df -h across mounted filesystems",
+    "command": "df -h",
+    "preformatted": true
+  }
+}
+`,
+      "docker-containers.jsonc.example": `// Count of running Docker containers
+// Rename to docker-containers.jsonc to enable
+{
+  "id": "docker-containers",
+  "title": "Docker",
+  "compactTitle": "Docker",
+  "icon": "Box",
+  "command": "docker ps -q 2>/dev/null | wc -l",
+  "suffix": " running",
+  "intervalMs": 5000,
+  "timeoutMs": 3000,
+  "thresholds": {
+    "warning": 10,
+    "danger": 20
+  },
+  "modal": {
+    "title": "Running Docker Containers",
+    "description": "Live container status via docker ps",
+    "command": "docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'",
+    "preformatted": true
+  }
+}
+`,
+      "gpu-nvidia.jsonc.example": `// NVIDIA GPU Utilization
+// Rename to gpu-nvidia.jsonc to enable
+{
+  "id": "gpu-util",
+  "title": "GPU",
+  "compactTitle": "GPU",
+  "icon": "Cpu",
+  "command": "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits",
+  "suffix": "%",
+  "intervalMs": 3000,
+  "timeoutMs": 2000,
+  "thresholds": {
+    "warning": 70,
+    "danger": 90
+  },
+  "modal": {
+    "title": "GPU Vitals & Memory",
+    "description": "Live hardware telemetry from nvidia-smi",
+    "command": "nvidia-smi",
+    "preformatted": true
+  }
+}
+`,
+    };
+
+    for (const [filename, content] of Object.entries(seedTemplates)) {
+      fs.writeFileSync(path.join(CUSTOM_PILLS_DIR, filename), content, "utf8");
+    }
+    log.info("Seeded sample custom pill templates", { count: Object.keys(seedTemplates).length });
+  }
 } catch (err) {
   log.warn("Failed to ensure custom pills directory", {
     error: err instanceof Error ? err.message : String(err),

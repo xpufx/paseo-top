@@ -1,0 +1,22 @@
+// Uncommitted git changes in current workspace
+// Drop into ~/.paseo/top/pills/ to enable
+{
+  "id": "git-dirty",
+  "title": "Dirty Files",
+  "compactTitle": "Dirty",
+  "icon": "GitCommit",
+  "command": "git status --porcelain 2>/dev/null | wc -l",
+  "suffix": " dirty",
+  "intervalMs": 3000,
+  "timeoutMs": 2000,
+  "thresholds": {
+    "warning": 5,
+    "danger": 15
+  },
+  "modal": {
+    "title": "Uncommitted Git Changes",
+    "description": "Output of git status -s",
+    "command": "git status -s",
+    "preformatted": true
+  }
+}

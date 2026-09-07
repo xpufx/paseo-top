@@ -51,6 +51,19 @@ Displays real-time system performance alongside your active Git branch and workt
 
 Extend `paseo-top` with user-defined metric pills by creating declarative JSON or JSONC configuration files in `~/.paseo/top/pills/`.
 
+Ready-to-use drop-in examples are included in the [`examples/pills/`](examples/pills/) directory:
+- [`examples/pills/disk-usage.jsonc`](examples/pills/disk-usage.jsonc): Root filesystem free space via `df -h`.
+- [`examples/pills/docker-containers.jsonc`](examples/pills/docker-containers.jsonc): Running Docker container count.
+- [`examples/pills/gpu-nvidia.jsonc`](examples/pills/gpu-nvidia.jsonc): NVIDIA GPU utilization via `nvidia-smi`.
+- [`examples/pills/battery.jsonc`](examples/pills/battery.jsonc): Laptop battery capacity with inverted thresholds.
+- [`examples/pills/git-dirty.jsonc`](examples/pills/git-dirty.jsonc): Active uncommitted git modifications.
+
+To activate any example instantly, copy it into your local pills directory:
+
+```bash
+cp examples/pills/disk-usage.jsonc ~/.paseo/top/pills/
+```
+
 Every configuration file in `~/.paseo/top/pills/` generates an active pill in Paseo's composer trackbar, backed by background polling and an on-demand drilldown modal.
 
 ### Example 1: GPU Utilization (NVIDIA)

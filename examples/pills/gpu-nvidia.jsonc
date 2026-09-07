@@ -1,0 +1,22 @@
+// NVIDIA GPU Utilization
+// Drop into ~/.paseo/top/pills/ to enable
+{
+  "id": "gpu-util",
+  "title": "GPU",
+  "compactTitle": "GPU",
+  "icon": "Cpu",
+  "command": "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits",
+  "suffix": "%",
+  "intervalMs": 3000,
+  "timeoutMs": 2000,
+  "thresholds": {
+    "warning": 70,
+    "danger": 90
+  },
+  "modal": {
+    "title": "GPU Vitals & Memory",
+    "description": "Live hardware telemetry from nvidia-smi",
+    "command": "nvidia-smi",
+    "preformatted": true
+  }
+}

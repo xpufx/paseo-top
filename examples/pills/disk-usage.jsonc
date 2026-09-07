@@ -1,0 +1,18 @@
+// Free disk space on root partition
+// Drop into ~/.paseo/top/pills/ to enable
+{
+  "id": "root-disk",
+  "title": "Disk",
+  "compactTitle": "Disk",
+  "icon": "HardDrive",
+  "command": "df -h / | awk 'NR==2 {print $4}'",
+  "suffix": " free",
+  "intervalMs": 10000,
+  "timeoutMs": 3000,
+  "modal": {
+    "title": "Filesystem Disk Space",
+    "description": "Output of df -h across mounted filesystems",
+    "command": "df -h",
+    "preformatted": true
+  }
+}
