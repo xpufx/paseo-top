@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, Text, View, Pressable } from "react-native";
 import {
   useWorkspace,
@@ -1547,6 +1547,14 @@ function LiveCustomPillModal({ pillId, initial, client }: LiveCustomPillModalPro
       setRefreshing(false);
     }
   };
+
+  // Run the drilldown command once when the modal opens so it never shows stale pill output
+  const didInitialRun = useRef(false);
+  useEffect(() => {
+    if (didInitialRun.current) return;
+    didInitialRun.current = true;
+    void handleRefresh();
+  }, [pillId]);
 
   const effectiveState: CustomPillStateOutput = {
     ...liveState,
