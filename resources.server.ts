@@ -19,6 +19,7 @@ import {
   type McpResourceStatus,
   type McpStatusSnapshot,
   type CustomPillState,
+  type CustomPillDefinition,
 } from "./resources.shared";
 import { PLUGIN_VERSION } from "./version";
 
@@ -123,16 +124,24 @@ export const customPillPoller = new CustomPillPoller({
 // Start polling discovered pills on server initialization
 void customPillPoller.start();
 
-let lastDiscoveredMtime = 0;
+const effectiveEnabled = new Set<string>();
 
 export async function refreshCustomPillConfigs(): Promise<void> {
   try {
-    const stat = await fs.promises.stat(CUSTOM_PILLS_DIR);
-    if (stat.mtimeMs !== lastDiscoveredMtime) {
-      lastDiscoveredMtime = stat.mtimeMs;
-      const discovered = await discoverCustomPillConfigs(CUSTOM_PILLS_DIR, log);
-      customPillPoller.updatePills(discovered);
+    const settings = await settingsStorage.readAsync();
+    const overrides = settings.customPillEnabled ?? {};
+    const discovered = await discoverCustomPillConfigs(CUSTOM_PILLS_DIR, log);
+    const masterEnabled = settings.showCustomPills ?? true;
+    const effective = discovered.map((pill) => {
+      const override = overrides[pill.id];
+      const enabled = masterEnabled && (override === undefined ? pill.enabled : override);
+      return enabled === pill.enabled ? pill : { ...pill, enabled };
+    });
+    effectiveEnabled.clear();
+    for (const pill of effective) {
+      if (pill.enabled) effectiveEnabled.add(pill.id);
     }
+    customPillPoller.updatePills(effective);
   } catch {
     // Directory might be temporarily inaccessible
   }
@@ -140,7 +149,25 @@ export async function refreshCustomPillConfigs(): Promise<void> {
 
 export async function handleGetCustomPills(): Promise<{ pills: CustomPillState[] }> {
   await refreshCustomPillConfigs();
-  return { pills: customPillPoller.getAllStates() };
+  return {
+    pills: customPillPoller
+      .getAllStates()
+      .filter((state) => effectiveEnabled.has(state.id)),
+  };
+}
+
+export async function handleListCustomPills(): Promise<{ pills: CustomPillDefinition[] }> {
+  const discovered = await discoverCustomPillConfigs(CUSTOM_PILLS_DIR, log);
+  const settings = await settingsStorage.readAsync();
+  const overrides = settings.customPillEnabled ?? {};
+  const masterEnabled = settings.showCustomPills ?? true;
+  return {
+    pills: discovered.map((pill) => {
+      const override = overrides[pill.id];
+      const enabled = masterEnabled && (override === undefined ? pill.enabled : override);
+      return enabled === pill.enabled ? pill : { ...pill, enabled };
+    }),
+  };
 }
 
 export async function handleRunCustomPillModalCommand(input: {
@@ -165,6 +192,9 @@ export async function handleUpdateSettings(patch: Partial<TopSettings>): Promise
   log.info("Settings update requested", { patch });
   const updated = await settingsStorage.updateAsync((prev) => ({ ...prev, ...patch }));
   log.info("Settings updated successfully", { updated });
+  if (patch.customPillEnabled !== undefined || patch.showCustomPills !== undefined) {
+    await refreshCustomPillConfigs();
+  }
   return updated;
 }
 
@@ -347,6 +377,8 @@ export async function handleGetSystemResources(input?: {
     branch,
     mcp,
     mcpInstalled,
-    customPills: customPillPoller.getAllStates(),
+    customPills: customPillPoller
+      .getAllStates()
+      .filter((state) => effectiveEnabled.has(state.id)),
   };
 }

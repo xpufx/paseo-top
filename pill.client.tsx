@@ -43,11 +43,14 @@ import {
   getSystemResourcesRpc,
   topSettingsContract,
   getCustomPillsRpc,
+  listCustomPillsRpc,
   runCustomPillModalCommandRpc,
   type SystemResources,
   type ResourceField,
   type TopSettings,
   type PillMode,
+  type CustomPillDefinition,
+  type CustomPillStateOutput,
 } from "./resources.shared";
 import { PLUGIN_VERSION } from "./version";
 
@@ -740,6 +743,9 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
       refetchInterval: 2000,
     },
   );
+  const { data: customPillList } = useRpcQuery(listCustomPillsRpc, EMPTY_PARAMS, {
+    refetchInterval: 5000,
+  });
   const [selectedTab, setSelectedTab] = useState<ModalTab | null>(null);
   const activeTab = selectedTab ?? payload ?? initialTab ?? settings.defaultTab ?? "system";
 
@@ -1304,6 +1310,46 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
             </View>
           </Card>
 
+          {/* Custom Metric Pills */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Custom Metric Pills"
+              icon="Sliders"
+              subtitle="Standalone pills discovered from ~/.paseo/top/pills"
+            />
+            <View style={styles.settingsToggles}>
+              <Toggle
+                label="Show Custom Metric Pills"
+                description="Display pills defined in ~/.paseo/top/pills as standalone composer pills"
+                value={settings.showCustomPills ?? true}
+                onValueChange={(val) => {
+                  const s = { ...settings, showCustomPills: val };
+                  updateSettings({ showCustomPills: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              {(customPillList?.pills ?? []).map((pill) => {
+                const enabled = settings.customPillEnabled?.[pill.id] ?? pill.enabled;
+                return (
+                  <Toggle
+                    key={pill.id}
+                    label={pill.title}
+                    description={pill.sourceFile ?? "Config file in ~/.paseo/top/pills"}
+                    value={enabled}
+                    onValueChange={(val) => {
+                      const s = {
+                        ...settings,
+                        customPillEnabled: { ...settings.customPillEnabled, [pill.id]: val },
+                      };
+                      updateSettings({ customPillEnabled: s.customPillEnabled });
+                      notifySettingsChanged(s);
+                    }}
+                  />
+                );
+              })}
+            </View>
+          </Card>
+
           {/* Rotation Speed Setting (Cycle mode only) */}
           {(settings.pillMode ?? "cycle") === "cycle" && (
             <Card variant="elevated">
@@ -1478,11 +1524,12 @@ function LiveCustomPillView({ pillId, initial }: LiveCustomPillViewProps) {
 
 interface LiveCustomPillModalProps {
   pillId: string;
-  initial: CustomPillState;
+  initial: CustomPillStateOutput;
   client: PluginClientContext;
 }
 
 function LiveCustomPillModal({ pillId, initial, client }: LiveCustomPillModalProps) {
+  const { colors } = usePluginTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [outputOverride, setOutputOverride] = useState<string | undefined>(undefined);
   const { data, refetch } = useRpcQuery(getCustomPillsRpc, EMPTY_PARAMS, { refetchInterval: 3000 });
@@ -1501,17 +1548,25 @@ function LiveCustomPillModal({ pillId, initial, client }: LiveCustomPillModalPro
     }
   };
 
-  const effectiveState: CustomPillState = {
+  const effectiveState: CustomPillStateOutput = {
     ...liveState,
     modalOutput: outputOverride ?? liveState.modalOutput,
   };
 
   return (
-    <CustomPillModalContent
-      state={effectiveState}
-      onRefresh={handleRefresh}
-      isRefreshing={refreshing}
-    />
+    <View>
+      <CustomPillModalContent
+        state={effectiveState}
+        onRefresh={handleRefresh}
+        isRefreshing={refreshing}
+      />
+      <View style={styles.customPillHint}>
+        <Text style={[styles.footerText, { color: colors.foregroundMuted }]}>
+          Custom metric pill from paseo-top
+          {effectiveState.sourceFile ? ` - defined in ${effectiveState.sourceFile}` : ""}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -1727,6 +1782,16 @@ export function contributeClient(client: PluginClientContext) {
   const activeCustomPills = new Map<string, () => void>();
 
   async function syncCustomPills() {
+    const showCustom = latestSettings.showCustomPills ?? true;
+    if (!showCustom) {
+      // Master toggle off: unregister all custom pills
+      for (const [id, cleanup] of activeCustomPills.entries()) {
+        cleanup();
+        activeCustomPills.delete(id);
+      }
+      return;
+    }
+
     try {
       const res = await client.rpc(getCustomPillsRpc, EMPTY_PARAMS);
       const pills = res?.pills ?? [];
@@ -1765,10 +1830,15 @@ export function contributeClient(client: PluginClientContext) {
 
   void syncCustomPills();
   const customPillInterval = setInterval(syncCustomPills, 5000);
+  const onSettingsChanged = () => {
+    void syncCustomPills();
+  };
+  settingsListeners.add(onSettingsChanged);
 
   return () => {
     clearInterval(customPillInterval);
     settingsListeners.delete(syncPills);
+    settingsListeners.delete(onSettingsChanged);
     for (const cleanup of activePills.values()) {
       cleanup();
     }
@@ -1804,6 +1874,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 8,
     paddingBottom: 4,
+  },
+  customPillHint: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   footerText: {
     fontSize: 10,
