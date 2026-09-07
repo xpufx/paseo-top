@@ -334,7 +334,10 @@ function PillItemContent({
       }
 
       return (
-        <View style={styles.pillContainer}>
+        <View
+          style={styles.pillContainer}
+          accessibilityLabel="MCP Server Health (via paseo-mcp-tools)"
+        >
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
             <Text style={{ color: dotColor, fontWeight: "700" }}>{dotChar} </Text>
             <Text style={{ color: colors.foreground, fontWeight: "600" }}>{text}</Text>
@@ -846,6 +849,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
             <Card variant="elevated">
               <Card.Header
                 title="MCP Servers"
+                subtitle="Source: paseo-mcp-tools"
                 icon="Server"
                 value={
                   data.mcp ? (
@@ -870,6 +874,10 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
                     <KeyValue
                       label="Snapshot Updated"
                       value={formatTimeAgo(data.mcp.updatedAt)}
+                    />
+                    <KeyValue
+                      label="Data Provider"
+                      value="paseo-mcp-tools"
                     />
                   </KeyValueGroup>
 
@@ -1164,10 +1172,10 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
                 }}
               />
               <Toggle
-                label="MCP Server Health"
+                label="MCP Server Health (via mcp-tools)"
                 description={
                   Boolean(data?.mcpInstalled)
-                    ? "Live MCP server health and tool counts"
+                    ? "Live MCP server health snapshots from paseo-mcp-tools plugin"
                     : "Requires paseo-mcp-tools plugin (not installed)"
                 }
                 value={settings.showMcp ?? settings.mcp ?? true}
