@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, Pressable } from "react-native";
 import {
   useWorkspace,
   useAgent,
@@ -152,6 +152,27 @@ export type PillItemType =
   | "load"
   | "uptime"
   | "mcp";
+
+export type ModalTab = "system" | "context" | "settings" | "about";
+
+export function getItemTab(item: PillItemType): "system" | "context" {
+  switch (item) {
+    case "cpu_ram":
+    case "load":
+    case "uptime":
+    case "mcp":
+      return "system";
+    case "branch":
+    case "worktree":
+    case "agent_title":
+    case "agent":
+    case "agent_provider":
+    case "agent_activity":
+      return "context";
+  }
+}
+
+const currentCycleTabByAgent = new Map<string, ModalTab>();
 
 interface PillItemContentProps {
   item: PillItemType;
@@ -378,17 +399,19 @@ export function notifySettingsChanged(settings: TopSettings) {
   }
 }
 
+export interface SingleItemPillViewProps extends RenderPillProps<ModalTab> {
+  item: PillItemType;
+  defaultTab?: ModalTab;
+}
+
 export function SingleItemPillView({
   item,
+  defaultTab,
   workspaceId,
   agentId,
   isOpen,
-}: {
-  item: PillItemType;
-  workspaceId: string;
-  agentId: string;
-  isOpen: boolean;
-}) {
+  open,
+}: SingleItemPillViewProps) {
   const { colors } = usePluginTheme();
   const workspaceDirectory = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.directory);
   const agent = useAgent(agentId, (a: PluginAgentSnapshot) => ({
@@ -439,6 +462,8 @@ export function SingleItemPillView({
     [workspaceDirectory],
   );
 
+  const targetTab = defaultTab ?? getItemTab(item);
+
   if (item === "mcp") {
     if (isLoading || !data || !data.mcpInstalled) {
       return null;
@@ -447,35 +472,50 @@ export function SingleItemPillView({
 
   if (shouldPoll && isError) {
     return (
-      <View style={styles.pillContainer}>
+      <Pressable
+        onPress={() => open(targetTab)}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        style={styles.pillContainer}
+      >
         <Icon name="Ghost" size={13} color={colors.statusDanger} />
         <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
           Offline
         </Text>
-      </View>
+      </Pressable>
     );
   }
 
   if (shouldPoll && (isLoading || !data)) {
     return (
-      <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
-        top...
-      </Text>
+      <Pressable
+        onPress={() => open(targetTab)}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      >
+        <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+          top...
+        </Text>
+      </Pressable>
     );
   }
 
   return (
-    <PillItemContent
-      item={item}
-      data={data}
-      agent={agent}
-      worktreeLocationText={worktreeLocationText}
-      isOpen={isOpen}
-    />
+    <Pressable
+      onPress={() => open(targetTab)}
+      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      style={styles.cyclePressable}
+    >
+      <PillItemContent
+        item={item}
+        data={data}
+        agent={agent}
+        worktreeLocationText={worktreeLocationText}
+        isOpen={isOpen}
+      />
+    </Pressable>
   );
 }
 
-function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
+function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalTab>) {
   const { colors } = usePluginTheme();
   const { settings } = usePluginSettings(topSettingsContract, {
     refetchInterval: 5000,
@@ -585,72 +625,109 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     return () => clearInterval(timer);
   }, [items.length, settings.intervalSeconds]);
 
+  const activeMode = items.length > 0 ? items[currentIndex % items.length] : "cpu_ram";
+  const activeTab = getItemTab(activeMode);
+
+  useEffect(() => {
+    currentCycleTabByAgent.set(agentId, activeTab);
+    return () => {
+      currentCycleTabByAgent.delete(agentId);
+    };
+  }, [agentId, activeTab]);
+
   if (shouldPoll && isError) {
     return (
-      <View style={styles.pillContainer}>
+      <Pressable
+        onPress={() => open(settings.defaultTab ?? "system")}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        style={styles.pillContainer}
+      >
         <Icon name="Ghost" size={13} color={colors.statusDanger} />
         <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
           Offline
         </Text>
-      </View>
+      </Pressable>
     );
   }
 
   if (shouldPoll && (isLoading || !data)) {
     return (
-      <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
-        top…
-      </Text>
+      <Pressable
+        onPress={() => open(settings.defaultTab ?? "system")}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      >
+        <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+          top...
+        </Text>
+      </Pressable>
     );
   }
 
   if (items.length === 0) {
     return (
-      <View style={styles.pillContainer}>
+      <Pressable
+        onPress={() => open(settings.defaultTab ?? "system")}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        style={styles.pillContainer}
+      >
         <Icon name="Activity" size={12} color={colors.accent} />
         <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
           top
         </Text>
-      </View>
+      </Pressable>
     );
   }
 
   if (settings.pillMode === "all") {
     return (
       <View style={styles.allInOneContainer}>
-        {items.map((item, idx) => (
-          <React.Fragment key={item}>
-            {idx > 0 && <Text style={[styles.dividerText, { color: colors.foregroundMuted }]}>│</Text>}
-            <PillItemContent
-              item={item}
-              data={data}
-              agent={agent}
-              worktreeLocationText={worktreeLocationText}
-              isOpen={isOpen}
-            />
-          </React.Fragment>
-        ))}
+        {items.map((item, idx) => {
+          const segmentTab = getItemTab(item);
+          return (
+            <React.Fragment key={item}>
+              {idx > 0 && <Text style={[styles.dividerText, { color: colors.foregroundMuted }]}>│</Text>}
+              <Pressable
+                onPress={() => open(segmentTab)}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                style={styles.segmentPressable}
+              >
+                <PillItemContent
+                  item={item}
+                  data={data}
+                  agent={agent}
+                  worktreeLocationText={worktreeLocationText}
+                  isOpen={isOpen}
+                />
+              </Pressable>
+            </React.Fragment>
+          );
+        })}
       </View>
     );
   }
 
-  const activeMode = items.length > 0 ? items[currentIndex % items.length] : "cpu_ram";
   return (
-    <PillItemContent
-      item={activeMode}
-      data={data}
-      agent={agent}
-      worktreeLocationText={worktreeLocationText}
-      isOpen={isOpen}
-    />
+    <Pressable
+      onPress={() => open(activeTab)}
+      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      style={styles.cyclePressable}
+    >
+      <PillItemContent
+        item={activeMode}
+        data={data}
+        agent={agent}
+        worktreeLocationText={worktreeLocationText}
+        isOpen={isOpen}
+      />
+    </Pressable>
   );
 }
 
-interface ResourceModalProps extends RenderModalProps {
-  initialTab?: "system" | "context" | "settings" | "about";
+interface ResourceModalProps extends RenderModalProps<ModalTab> {
+  initialTab?: ModalTab;
 }
 
-function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModalProps) {
+function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: ResourceModalProps) {
   const { colors } = usePluginTheme();
   const { settings, updateSettings, resetSettings, refetch: refetchSettings } = usePluginSettings(
     topSettingsContract,
@@ -658,8 +735,14 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
       refetchInterval: 2000,
     },
   );
-  const [selectedTab, setSelectedTab] = useState<string | null>(initialTab ?? null);
-  const activeTab = selectedTab ?? initialTab ?? settings.defaultTab ?? "system";
+  const [selectedTab, setSelectedTab] = useState<ModalTab | null>(null);
+  const activeTab = selectedTab ?? payload ?? initialTab ?? settings.defaultTab ?? "system";
+
+  useEffect(() => {
+    if (payload) {
+      setSelectedTab(payload);
+    }
+  }, [payload]);
 
   // Ensure freshest settings are fetched whenever user views settings
   useEffect(() => {
@@ -723,7 +806,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
 
   const handleTabChange = (tabId: string) => {
     triggerHaptic("light");
-    setSelectedTab(tabId);
+    setSelectedTab(tabId as ModalTab);
   };
 
   if (isError && !data) {
@@ -1352,8 +1435,10 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
 
 export function contributeClient(client: PluginClientContext) {
   const activePills = new Map<string, () => void>();
+  let latestSettings: TopSettings = topSettingsContract.defaultSettings;
 
   function syncPills(settings: TopSettings) {
+    latestSettings = settings;
     const mode = settings.pillMode ?? "cycle";
 
     if (mode === "cycle" || mode === "all") {
@@ -1367,11 +1452,17 @@ export function contributeClient(client: PluginClientContext) {
 
       // Ensure main pill is registered
       if (!activePills.has("paseo-top")) {
-        const cleanup = registerComposerPill(client, {
+        const cleanup = registerComposerPill<ModalTab>(client, {
           id: "paseo-top",
           title: "top",
           modalTitle: "Host System Resources",
           modalIcon: "Activity",
+          resolveDefaultPayload: ({ agentId }) => {
+            if (latestSettings.pillMode === "all") {
+              return latestSettings.defaultTab;
+            }
+            return currentCycleTabByAgent.get(agentId) ?? latestSettings.defaultTab;
+          },
           renderPill: (props) => <PillView {...props} />,
           renderModal: (props) => <ResourceModal {...props} />,
         });
@@ -1509,13 +1600,18 @@ export function contributeClient(client: PluginClientContext) {
       // Register newly desired pills
       for (const pillDef of desiredPills) {
         if (!activePills.has(pillDef.id)) {
-          const cleanup = registerComposerPill(client, {
+          const cleanup = registerComposerPill<ModalTab>(client, {
             id: pillDef.id,
             title: pillDef.title,
             modalTitle: pillDef.modalTitle,
             modalIcon: "Activity",
+            resolveDefaultPayload: () => pillDef.defaultTab,
             renderPill: (props) => (
-              <SingleItemPillView item={pillDef.item} {...props} />
+              <SingleItemPillView
+                item={pillDef.item}
+                defaultTab={pillDef.defaultTab}
+                {...props}
+              />
             ),
             renderModal: (props) => (
               <ResourceModal initialTab={pillDef.defaultTab} {...props} />
@@ -1629,6 +1725,16 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     flexShrink: 1,
     minWidth: 0,
+  },
+  segmentPressable: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+  },
+  cyclePressable: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
   },
   dividerText: {
     fontSize: 10,
