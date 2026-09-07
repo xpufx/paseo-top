@@ -1,8 +1,35 @@
 import { defineContract, defineSettingsContract, type RpcOutput } from "paseo-plugin-helper/shared";
 import { z } from "zod";
 
-export const ResourceFieldSchema = z.enum(["cpu", "memory", "load", "uptime", "branch"]);
+export const ResourceFieldSchema = z.enum(["cpu", "memory", "load", "uptime", "branch", "mcp"]);
 export type ResourceField = z.infer<typeof ResourceFieldSchema>;
+
+export const McpServerStatusSchema = z.object({
+  name: z.string(),
+  status: z.enum(["healthy", "degraded", "down", "unknown"]),
+  latencyMs: z.number(),
+});
+export type McpServerStatus = z.infer<typeof McpServerStatusSchema>;
+
+export interface McpStatusSnapshot {
+  updatedAt: string;
+  total: number;
+  healthy: number;
+  degraded: number;
+  down: number;
+  servers: McpServerStatus[];
+}
+
+export const McpResourceStatusSchema = z.object({
+  updatedAt: z.string(),
+  total: z.number(),
+  healthy: z.number(),
+  degraded: z.number(),
+  down: z.number(),
+  isStale: z.boolean(),
+  servers: z.array(McpServerStatusSchema),
+});
+export type McpResourceStatus = z.infer<typeof McpResourceStatusSchema>;
 
 export const getSystemResourcesRpc = defineContract({
   name: "system-resources.get",
@@ -27,6 +54,8 @@ export const getSystemResourcesRpc = defineContract({
     loadAvg: z.array(z.number()).optional(),
     uptimeSeconds: z.number().optional(),
     branch: z.string().nullable().optional(),
+    mcp: McpResourceStatusSchema.nullable().optional(),
+    mcpInstalled: z.boolean().optional(),
   }),
 });
 
@@ -46,6 +75,8 @@ export const TopSettingsSchema = z.object({
   showAgentActivity: z.boolean().default(false),
   showLoad: z.boolean().default(false),
   showUptime: z.boolean().default(false),
+  showMcp: z.boolean().default(true),
+  mcp: z.boolean().default(true),
   intervalSeconds: z.number().min(1).max(60).default(3),
   defaultTab: z.enum(["system", "context", "settings", "about"]).default("system"),
 });

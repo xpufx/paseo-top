@@ -12,6 +12,8 @@ import {
   topSettingsContract,
   type TopSettings,
   type ResourceField,
+  type McpResourceStatus,
+  type McpStatusSnapshot,
 } from "./resources.shared";
 import { PLUGIN_VERSION } from "./version";
 
@@ -22,6 +24,8 @@ log.info("Initialized host system resources monitor", { version: PLUGIN_VERSION 
 const settingsStorage = new PluginStorage<TopSettings>("top", "settings.json", {
   schema: topSettingsContract.schema,
 });
+
+const mcpStorage = new PluginStorage<McpStatusSnapshot>("mcp-tools", "status.json");
 
 export async function handleGetSettings(): Promise<TopSettings> {
   const data = await settingsStorage.readAsync();
@@ -103,6 +107,11 @@ export async function handleGetSystemResources(input?: {
   const needLoad = !isSelective || fields.includes("load");
   const needUptime = !isSelective || fields.includes("uptime");
   const needBranch = !isSelective || fields.includes("branch");
+  const needMcp = !isSelective || fields.includes("mcp");
+
+  const mcpInstalled =
+    fs.existsSync(path.join(os.homedir(), ".paseo", "plugins", "mcp-tools")) ||
+    mcpStorage.exists();
 
   let branch: string | null | undefined = undefined;
   if (needBranch) {
@@ -170,6 +179,27 @@ export async function handleGetSystemResources(input?: {
     uptimeSeconds = Math.floor(os.uptime());
   }
 
+  let mcp: McpResourceStatus | null = null;
+  if (needMcp && mcpStorage.exists()) {
+    try {
+      const snapshot = await mcpStorage.readAsync();
+      if (snapshot && typeof snapshot.updatedAt === "string" && Array.isArray(snapshot.servers)) {
+        const isStale = Date.now() - new Date(snapshot.updatedAt).getTime() > 60_000;
+        mcp = {
+          updatedAt: snapshot.updatedAt,
+          total: typeof snapshot.total === "number" ? snapshot.total : snapshot.servers.length,
+          healthy: typeof snapshot.healthy === "number" ? snapshot.healthy : 0,
+          degraded: typeof snapshot.degraded === "number" ? snapshot.degraded : 0,
+          down: typeof snapshot.down === "number" ? snapshot.down : 0,
+          isStale,
+          servers: snapshot.servers,
+        };
+      }
+    } catch {
+      mcp = null;
+    }
+  }
+
   return {
     version: PLUGIN_VERSION,
     hostname,
@@ -184,5 +214,7 @@ export async function handleGetSystemResources(input?: {
     loadAvg,
     uptimeSeconds,
     branch,
+    mcp,
+    mcpInstalled,
   };
 }

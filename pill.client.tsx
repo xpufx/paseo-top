@@ -150,7 +150,8 @@ export type PillItemType =
   | "agent_provider"
   | "agent_activity"
   | "load"
-  | "uptime";
+  | "uptime"
+  | "mcp";
 
 interface PillItemContentProps {
   item: PillItemType;
@@ -310,6 +311,38 @@ function PillItemContent({
         </View>
       );
 
+    case "mcp": {
+      const mcp = data?.mcp;
+      let dotChar = "○";
+      let dotColor = colors.foregroundMuted;
+      let text = "MCP -";
+
+      if (mcp && !mcp.isStale) {
+        dotChar = "●";
+        if (mcp.down > 0) {
+          dotColor = colors.statusDanger;
+        } else if (mcp.degraded > 0 || mcp.healthy !== mcp.total) {
+          dotColor = colors.statusWarning;
+        } else {
+          dotColor = colors.statusSuccess;
+        }
+        text = `${mcp.healthy}/${mcp.total} MCP`;
+      } else if (mcp && mcp.isStale) {
+        dotChar = "○";
+        dotColor = colors.foregroundMuted;
+        text = `${mcp.healthy}/${mcp.total} MCP`;
+      }
+
+      return (
+        <View style={styles.pillContainer}>
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: dotColor, fontWeight: "700" }}>{dotChar} </Text>
+            <Text style={{ color: colors.foreground, fontWeight: "600" }}>{text}</Text>
+          </Text>
+        </View>
+      );
+    }
+
     case "cpu_ram":
     default: {
       const ramGb =
@@ -373,6 +406,8 @@ export function SingleItemPillView({
         return ["load"] as ResourceField[];
       case "uptime":
         return ["uptime"] as ResourceField[];
+      case "mcp":
+        return ["mcp"] as ResourceField[];
       default:
         return [] as ResourceField[];
     }
@@ -401,6 +436,12 @@ export function SingleItemPillView({
     [workspaceDirectory],
   );
 
+  if (item === "mcp") {
+    if (isLoading || !data || !data.mcpInstalled) {
+      return null;
+    }
+  }
+
   if (shouldPoll && isError) {
     return (
       <View style={styles.pillContainer}>
@@ -415,7 +456,7 @@ export function SingleItemPillView({
   if (shouldPoll && (isLoading || !data)) {
     return (
       <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
-        top…
+        top...
       </Text>
     );
   }
@@ -459,7 +500,8 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     settings.showAgentProvider ||
     settings.showAgentActivity ||
     settings.showLoad ||
-    settings.showUptime;
+    settings.showUptime ||
+    (settings.showMcp ?? settings.mcp ?? true);
 
   // If no items are selected, fallback to CPU & RAM without mutating saved settings
   const effectiveShowCpuRam = settings.showCpuRam || !hasAnyEnabled;
@@ -478,8 +520,19 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     if (settings.showUptime) {
       fields.push("uptime");
     }
+    if (settings.showMcp ?? settings.mcp ?? true) {
+      fields.push("mcp");
+    }
     return fields;
-  }, [effectiveShowCpuRam, settings.showBranch, settings.showLoad, settings.showUptime, workspaceDirectory]);
+  }, [
+    effectiveShowCpuRam,
+    settings.showBranch,
+    settings.showLoad,
+    settings.showUptime,
+    settings.showMcp,
+    settings.mcp,
+    workspaceDirectory,
+  ]);
 
   const shouldPoll = neededFields.length > 0;
 
@@ -499,6 +552,8 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
     },
   );
 
+  const isMcpEnabled = (settings.showMcp ?? settings.mcp ?? true) && Boolean(data?.mcpInstalled);
+
   const worktreeLocationText = useMemo(
     () => formatWorktreeLocation(workspaceDirectory),
     [workspaceDirectory],
@@ -515,6 +570,7 @@ function PillView({ isOpen, workspaceId, agentId }: RenderPillProps) {
   if (settings.showAgentActivity && (agent?.lastActivityAt || agent?.status)) items.push("agent_activity");
   if (settings.showLoad) items.push("load");
   if (settings.showUptime) items.push("uptime");
+  if (isMcpEnabled) items.push("mcp");
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -602,17 +658,6 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
   const [selectedTab, setSelectedTab] = useState<string | null>(initialTab ?? null);
   const activeTab = selectedTab ?? initialTab ?? settings.defaultTab ?? "system";
 
-  const hasAnyPillEnabled =
-    settings.showCpuRam ||
-    settings.showBranch ||
-    settings.showWorktree ||
-    settings.showAgentTitle ||
-    settings.showAgent ||
-    settings.showAgentProvider ||
-    settings.showAgentActivity ||
-    settings.showLoad ||
-    settings.showUptime;
-
   // Ensure freshest settings are fetched whenever user views settings
   useEffect(() => {
     if (activeTab === "settings") {
@@ -652,6 +697,20 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
       isOpen: true,
     },
   );
+
+  const isMcpEnabled = (settings.showMcp ?? settings.mcp ?? true) && Boolean(data?.mcpInstalled);
+
+  const hasAnyPillEnabled =
+    settings.showCpuRam ||
+    settings.showBranch ||
+    settings.showWorktree ||
+    settings.showAgentTitle ||
+    settings.showAgent ||
+    settings.showAgentProvider ||
+    settings.showAgentActivity ||
+    settings.showLoad ||
+    settings.showUptime ||
+    isMcpEnabled;
 
   const handleRefresh = () => {
     triggerHaptic("light");
@@ -781,6 +840,81 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
               value={`${formatBytes(data.memoryUsedBytes ?? 0)} / ${formatBytes(data.memoryTotalBytes ?? 0)}`}
             />
           </Card>
+
+          {/* MCP Servers Card */}
+          {Boolean(data.mcpInstalled) && (
+            <Card variant="elevated">
+              <Card.Header
+                title="MCP Servers"
+                icon="Server"
+                value={
+                  data.mcp ? (
+                    <Badge
+                      label={data.mcp.isStale ? "Stale Snapshot" : "Live"}
+                      variant={data.mcp.isStale ? "warning" : "success"}
+                      dot
+                    />
+                  ) : (
+                    <Badge label="No Data" variant="neutral" />
+                  )
+                }
+              />
+
+              {data.mcp ? (
+                <>
+                  <KeyValueGroup columns={2}>
+                    <KeyValue
+                      label="Health"
+                      value={`${data.mcp.healthy} healthy / ${data.mcp.total} total`}
+                    />
+                    <KeyValue
+                      label="Snapshot Updated"
+                      value={formatTimeAgo(data.mcp.updatedAt)}
+                    />
+                  </KeyValueGroup>
+
+                  {data.mcp.servers && data.mcp.servers.length > 0 ? (
+                    <View style={styles.mcpList}>
+                      {data.mcp.servers.map((srv) => {
+                        const badgeVariant: "success" | "warning" | "danger" | "neutral" =
+                          srv.status === "healthy"
+                            ? "success"
+                            : srv.status === "degraded"
+                              ? "warning"
+                              : srv.status === "down"
+                                ? "danger"
+                                : "neutral";
+                        return (
+                          <View key={srv.name} style={styles.mcpRow}>
+                            <View style={styles.mcpInfo}>
+                              <Text
+                                numberOfLines={1}
+                                style={[styles.mcpName, { color: colors.foreground }]}
+                              >
+                                {srv.name}
+                              </Text>
+                              <Text style={[styles.mcpLatency, { color: colors.foregroundMuted }]}>
+                                {srv.latencyMs >= 0 ? `${srv.latencyMs}ms` : "timeout"}
+                              </Text>
+                            </View>
+                            <Badge label={srv.status} variant={badgeVariant} />
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={[styles.mcpEmpty, { color: colors.foregroundMuted }]}>
+                      No MCP servers configured
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text style={[styles.mcpEmpty, { color: colors.foregroundMuted }]}>
+                  Waiting for status snapshot from paseo-mcp-tools...
+                </Text>
+              )}
+            </Card>
+          )}
         </>
       )}
 
@@ -930,7 +1064,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
               icon="Sliders"
               subtitle={
                 !hasAnyPillEnabled
-                  ? "None selected — automatically showing CPU & RAM"
+                  ? "None selected -- automatically showing CPU & RAM"
                   : (settings.pillMode ?? "cycle") === "multiple"
                     ? "Choose which items appear as dedicated pills"
                     : (settings.pillMode ?? "cycle") === "all"
@@ -1026,6 +1160,21 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab }: ResourceModa
                 onValueChange={(val) => {
                   const s = { ...settings, showUptime: val };
                   updateSettings({ showUptime: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="MCP Server Health"
+                description={
+                  Boolean(data?.mcpInstalled)
+                    ? "Live MCP server health and tool counts"
+                    : "Requires paseo-mcp-tools plugin (not installed)"
+                }
+                value={settings.showMcp ?? settings.mcp ?? true}
+                disabled={!data?.mcpInstalled}
+                onValueChange={(val) => {
+                  const s = { ...settings, showMcp: val, mcp: val };
+                  updateSettings({ showMcp: val, mcp: val });
                   notifySettingsChanged(s);
                 }}
               />
@@ -1329,6 +1478,15 @@ export function contributeClient(client: PluginClientContext) {
           defaultTab: "system",
         });
       }
+      if (settings.showMcp ?? settings.mcp ?? true) {
+        desiredPills.push({
+          id: "paseo-top-mcp",
+          item: "mcp",
+          title: "MCP Health",
+          modalTitle: "Host System Resources",
+          defaultTab: "system",
+        });
+      }
 
       const desiredIds = new Set(desiredPills.map((p) => p.id));
 
@@ -1487,5 +1645,36 @@ const styles = StyleSheet.create({
   modeDesc: {
     fontSize: 11,
     lineHeight: 14,
+  },
+  mcpList: {
+    gap: 8,
+    marginTop: 4,
+  },
+  mcpRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  mcpInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  mcpName: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  mcpLatency: {
+    fontSize: 11,
+    fontFamily: "monospace",
+  },
+  mcpEmpty: {
+    fontSize: 12,
+    fontStyle: "italic",
+    paddingVertical: 4,
   },
 });
