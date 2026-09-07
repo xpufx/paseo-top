@@ -6,6 +6,8 @@ import {
   getSystemMetrics,
   createPluginLogger,
   PluginStorage,
+  isPluginInstalled,
+  isPluginRunning,
 } from "paseo-plugin-helper/server";
 import {
   type SystemResources,
@@ -109,9 +111,8 @@ export async function handleGetSystemResources(input?: {
   const needBranch = !isSelective || fields.includes("branch");
   const needMcp = !isSelective || fields.includes("mcp");
 
-  const mcpInstalled =
-    fs.existsSync(path.join(os.homedir(), ".paseo", "plugins", "mcp-tools")) ||
-    mcpStorage.exists();
+  const mcpRunning = await isPluginRunning("mcp-tools");
+  const mcpInstalled = await isPluginInstalled("mcp-tools");
 
   let branch: string | null | undefined = undefined;
   if (needBranch) {
@@ -180,7 +181,7 @@ export async function handleGetSystemResources(input?: {
   }
 
   let mcp: McpResourceStatus | null = null;
-  if (needMcp && mcpStorage.exists()) {
+  if (needMcp && mcpRunning && mcpStorage.exists()) {
     try {
       const snapshot = await mcpStorage.readAsync();
       if (snapshot && typeof snapshot.updatedAt === "string" && Array.isArray(snapshot.servers)) {
@@ -198,6 +199,10 @@ export async function handleGetSystemResources(input?: {
     } catch {
       mcp = null;
     }
+  }
+
+  if (!mcpRunning) {
+    mcp = null;
   }
 
   return {
