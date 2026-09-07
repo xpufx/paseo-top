@@ -2,6 +2,9 @@
 
 <p align="center">
   <img src="images/paseo-top-pill.png" alt="Paseo Top Composer Pill" />
+  <img src="images/pill.png" alt="Paseo Top Composer Pill" />
+  <br /><br />
+  <img src="images/modal.png" alt="Paseo Top Resource Modal" />
 </p>
 
 <p align="center">
