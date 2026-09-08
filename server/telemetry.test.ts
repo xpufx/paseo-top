@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import {
   topTimelineTelemetrySchema,
@@ -6,7 +6,11 @@ import {
   TOP_TIMELINE_KIND,
   TOP_TIMELINE_VERSION,
 } from "../shared/resources";
-import { collectTurnTelemetry } from "./resources";
+import { collectTurnTelemetry, customPillPoller } from "./resources";
+
+after(() => {
+  customPillPoller.stop();
+});
 
 test("topTimelineTelemetrySchema parses completed turn data", () => {
   const sample = {

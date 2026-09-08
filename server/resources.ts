@@ -122,9 +122,6 @@ export const customPillPoller = new CustomPillPoller({
   logger: log,
 });
 
-// Start polling discovered pills on server initialization
-void customPillPoller.start();
-
 const effectiveEnabled = new Set<string>();
 
 export async function refreshCustomPillConfigs(): Promise<void> {

@@ -22,6 +22,8 @@ import {
 } from "./server/resources";
 
 export default function contribute(server: PluginServerContext) {
+  void customPillPoller.start();
+
   server.handle(topSettingsContract.get, handleGetSettings);
   server.handle(topSettingsContract.update, handleUpdateSettings);
   server.handle(topSettingsContract.reset, handleResetSettings);
