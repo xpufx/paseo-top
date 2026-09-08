@@ -21,7 +21,7 @@ import {
   type CustomPillState,
   type CustomPillDefinition,
 } from "../shared/resources";
-import { PLUGIN_VERSION } from "../version";
+import { PLUGIN_VERSION } from "../shared/version";
 
 export const log = createPluginLogger("top", { version: PLUGIN_VERSION });
 

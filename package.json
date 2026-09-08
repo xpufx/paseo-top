@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.3.0",
   "scripts": {
-    "build": "node -e \"import('paseo-plugin-helper/server').then(m => m.stampVersion())\"",
+    "build": "node -e \"import('paseo-plugin-helper/server').then(m => m.stampVersion({ targetFile: 'shared/version.ts' }))\"",
     "pretypecheck": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck"

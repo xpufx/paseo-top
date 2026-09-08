@@ -56,7 +56,7 @@ import {
   type CustomPillDefinition,
   type CustomPillStateOutput,
 } from "../shared/resources";
-import { PLUGIN_VERSION } from "../version";
+import { PLUGIN_VERSION } from "../shared/version";
 
 const EMPTY_PARAMS = {};
 
