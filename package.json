@@ -6,7 +6,7 @@
     "build": "node -e \"import('paseo-plugin-helper/server').then(m => m.stampVersion({ targetFile: 'shared/version.ts' }))\"",
     "pretypecheck": "npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck"
+    "test": "npm run typecheck && npx tsx --test server/telemetry.test.ts"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.8.0-beta.1",

@@ -20,6 +20,7 @@ import {
   type McpStatusSnapshot,
   type CustomPillState,
   type CustomPillDefinition,
+  type TopTimelineTelemetryData,
 } from "../shared/resources";
 import { PLUGIN_VERSION } from "../shared/version";
 
@@ -380,5 +381,75 @@ export async function handleGetSystemResources(input?: {
     customPills: customPillPoller
       .getAllStates()
       .filter((state) => effectiveEnabled.has(state.id)),
+  };
+}
+
+export async function collectTurnTelemetry(
+  turnId: string | null,
+  agentId: string,
+  outcome: {
+    kind: "completed" | "failed" | "canceled";
+    error?: { message: string; code?: string };
+    reason?: string;
+  },
+  durationMs?: number,
+): Promise<TopTimelineTelemetryData> {
+  const metrics = getSystemMetrics();
+  let totalMem = metrics.memory.totalBytes;
+  let usedMem = metrics.memory.usedBytes;
+  let memPercent = Math.round(metrics.memory.usedPercent);
+
+  if (process.platform === "linux") {
+    try {
+      const meminfo = fs.readFileSync("/proc/meminfo", "utf8");
+      const match = meminfo.match(/MemAvailable:\s+(\d+)\s+kB/);
+      if (match && match[1]) {
+        const available = parseInt(match[1], 10) * 1024;
+        usedMem = Math.max(0, totalMem - available);
+        memPercent = Math.round((usedMem / totalMem) * 100);
+      }
+    } catch {
+      // Fallback to metrics.memory
+    }
+  }
+
+  const loadAvg = os.loadavg();
+  const loadAvg1m = loadAvg.length > 0 ? Math.round(loadAvg[0] * 100) / 100 : 0;
+
+  let mcpHealthy: number | undefined;
+  let mcpTotal: number | undefined;
+  if (mcpStorage.exists()) {
+    try {
+      const snap = await mcpStorage.readAsync();
+      if (snap && typeof snap.total === "number") {
+        mcpTotal = snap.total;
+        mcpHealthy = snap.healthy;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  let outcomeError: string | undefined;
+  if (outcome.kind === "failed" && outcome.error) {
+    outcomeError = outcome.error.message;
+  } else if (outcome.kind === "canceled" && outcome.reason) {
+    outcomeError = outcome.reason;
+  }
+
+  return {
+    turnId,
+    agentId,
+    outcomeKind: outcome.kind,
+    outcomeError,
+    timestamp: new Date().toISOString(),
+    durationMs,
+    cpuPercent: Math.round(metrics.cpu.usagePercent),
+    memUsedBytes: usedMem,
+    memTotalBytes: totalMem,
+    memPercent,
+    loadAvg1m,
+    mcpHealthy,
+    mcpTotal,
   };
 }

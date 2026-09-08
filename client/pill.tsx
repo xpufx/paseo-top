@@ -1350,6 +1350,16 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                   notifySettingsChanged(s);
                 }}
               />
+              <Toggle
+                label="Timeline Turn Telemetry"
+                description="Append a system resource telemetry card to the timeline when an agent turn ends"
+                value={settings.recordTurnTelemetry ?? true}
+                onValueChange={(val) => {
+                  const s = { ...settings, recordTurnTelemetry: val };
+                  updateSettings({ recordTurnTelemetry: val });
+                  notifySettingsChanged(s);
+                }}
+              />
             </View>
           </Card>
 

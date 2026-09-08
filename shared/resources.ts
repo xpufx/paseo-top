@@ -147,6 +147,7 @@ export const TopSettingsSchema = z.object({
   mcp: z.boolean().default(true),
   showCustomPills: z.boolean().default(true),
   customPillEnabled: z.record(z.string(), z.boolean()).default({}),
+  recordTurnTelemetry: z.boolean().default(true),
   intervalSeconds: z.number().min(1).max(60).default(3),
   defaultTab: z.enum(["system", "context", "settings", "about"]).default("system"),
 });
@@ -158,3 +159,23 @@ export const topSettingsContract = defineSettingsContract({
   schema: TopSettingsSchema,
   description: "Paseo top composer pill and display settings",
 });
+
+export const topTimelineTelemetrySchema = z.object({
+  turnId: z.string().nullable(),
+  agentId: z.string(),
+  outcomeKind: z.enum(["completed", "failed", "canceled"]),
+  outcomeError: z.string().optional(),
+  timestamp: z.string(),
+  durationMs: z.number().optional(),
+  cpuPercent: z.number(),
+  memUsedBytes: z.number(),
+  memTotalBytes: z.number(),
+  memPercent: z.number(),
+  loadAvg1m: z.number(),
+  mcpHealthy: z.number().optional(),
+  mcpTotal: z.number().optional(),
+});
+export type TopTimelineTelemetryData = z.infer<typeof topTimelineTelemetrySchema>;
+
+export const TOP_TIMELINE_KIND = "top-turn-telemetry";
+export const TOP_TIMELINE_VERSION = 1;
