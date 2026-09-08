@@ -1,472 +1,1956 @@
-import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { StyleSheet, Text, View, Pressable } from "react-native";
+import type {
+  PluginWorkspaceSnapshot,
+  PluginAgentSnapshot,
+} from "@getpaseo/plugin";
 import {
+  useWorkspace,
+  useAgent,
   useRpc,
   type PluginClientContext,
-  type PluginComposerPillProps,
-} from "@getpaseo/plugin";
-import { Icon, Modal } from "@getpaseo/plugin/react-native";
-import { getSystemResourcesRpc, type SystemResources } from "../shared/resources";
+} from "@getpaseo/plugin/client";
+import {
+  registerComposerPill,
+  type ComposerPillRegistrar,
+  ModalBody,
+  Card,
+  Button,
+  KeyValue,
+  KeyValueGroup,
+  ProgressBar,
+  MetricGauge,
+  Tabs,
+  Toggle,
+  Badge,
+  Icon,
+  AboutSection,
+  CustomPillBody,
+  CustomPillModalContent,
+  useRpcQuery,
+  useAutoRefreshQuery,
+  usePluginSettings,
+  usePluginTheme,
+  getStatusColor,
+  triggerHaptic,
+  type RenderModalProps,
+  type RenderPillProps,
+} from "paseo-plugin-helper/client";
+import {
+  formatBytes,
+  formatUptime,
+  resolveMetricStatus,
+  type MetricThresholds,
+  type CustomPillState,
+} from "paseo-plugin-helper/shared";
+import {
+  getSystemResourcesRpc,
+  topSettingsContract,
+  getCustomPillsRpc,
+  listCustomPillsRpc,
+  runCustomPillModalCommandRpc,
+  type SystemResources,
+  type ResourceField,
+  type TopSettings,
+  type PillMode,
+  type CustomPillDefinition,
+  type CustomPillStateOutput,
+} from "../shared/resources";
+import { PLUGIN_VERSION } from "../version";
 
-const openers = new Map<string, () => void>();
+const EMPTY_PARAMS = {};
 
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+function formatWorktreeLocation(dir: string | null | undefined): string {
+  if (!dir) return "";
+  // Check for Paseo-managed worktree: ~/.paseo/worktrees/<hash>/<slug>
+  const wtMatch = dir.match(/[/\\]\.paseo[/\\]worktrees[/\\][^/\\]+[/\\]([^/\\]+)$/);
+  if (wtMatch && wtMatch[1]) {
+    return wtMatch[1];
+  }
+  const clean = dir.replace(/[/\\]+$/, "");
+  const segments = clean.split(/[/\\]/);
+  return segments[segments.length - 1] || clean;
 }
 
-function formatBytes(bytes: number): string {
-  const gb = bytes / (1024 * 1024 * 1024);
-  return `${gb.toFixed(1)} GB`;
+function formatTimeAgo(isoString: string | null | undefined): string {
+  if (!isoString) return "--";
+  const time = new Date(isoString).getTime();
+  if (isNaN(time)) return "--";
+  const diffMs = Math.max(0, Date.now() - time);
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 30) return "just now";
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ${mins % 60}m ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
-function ProgressBar({
-  value,
-  color,
-  bgColor,
-}: {
-  value: number;
-  color: string;
-  bgColor: string;
-}) {
-  const clamped = Math.max(0, Math.min(100, value));
-  return (
-    <View style={[styles.progressTrack, { backgroundColor: bgColor }]}>
-      <View
-        style={[
-          styles.progressBar,
-          { width: `${clamped}%`, backgroundColor: color },
-        ]}
-      />
-    </View>
-  );
+function formatIdleDuration(isoString: string | null | undefined): string {
+  if (!isoString) return "--";
+  const time = new Date(isoString).getTime();
+  if (isNaN(time)) return "--";
+  const diffMs = Math.max(0, Date.now() - time);
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ${secs % 60}s`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ${mins % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
 }
 
-function ResourceModalContent({
-  theme,
-  initialData,
-}: {
-  theme: PluginComposerPillProps["theme"];
-  initialData: SystemResources | null;
-}) {
-  const fetchResources = useRpc(getSystemResourcesRpc);
-  const [data, setData] = useState<SystemResources | null>(initialData);
-  const [error, setError] = useState<string | null>(null);
+function formatIdlePill(status: string | undefined, isoString: string | null | undefined): string {
+  if (status === "running") return "active";
+  if (!isoString) return status || "--";
+  const time = new Date(isoString).getTime();
+  if (isNaN(time)) return "--";
+  const diffMs = Math.max(0, Date.now() - time);
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 60) return `idle ${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `idle ${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `idle ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `idle ${days}d`;
+}
 
-  useEffect(() => {
-    let mounted = true;
+const CPU_THRESHOLDS: MetricThresholds = { warning: 60, danger: 85 };
+const MEM_THRESHOLDS: MetricThresholds = { warning: 70, danger: 85 };
 
-    const update = async () => {
-      try {
-        const res = await fetchResources({});
-        if (mounted) {
-          setData(res);
-          setError(null);
-        }
-      } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : "Failed to load metrics");
-        }
-      }
+const TABS = [
+  { id: "system", label: "System", shortLabel: "System", icon: "Activity" },
+  { id: "context", label: "Workspace", shortLabel: "Workspace", icon: "GitBranch" },
+  { id: "settings", label: "Settings", shortLabel: "Settings", icon: "Sliders" },
+  { id: "about", label: "About", shortLabel: "About", icon: "Info" },
+];
+
+function getMetricColors(
+  data: SystemResources | undefined,
+  colors: ReturnType<typeof usePluginTheme>["colors"],
+) {
+  if (
+    !data ||
+    data.cpuUsagePercent === undefined ||
+    data.memoryUsedPercent === undefined
+  ) {
+    return {
+      cpuColor: colors.foregroundMuted,
+      memColor: colors.foregroundMuted,
     };
-
-    update();
-    const interval = setInterval(update, 1500);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [fetchResources]);
-
-  if (error && !data) {
-    return (
-      <View style={styles.modalContent}>
-        <View style={styles.errorBox}>
-          <Icon name="Ghost" size={24} color={theme.colors.statusDanger} />
-          <Text style={[styles.errorText, { color: theme.colors.statusDanger }]}>
-            {error}
-          </Text>
-        </View>
-      </View>
-    );
   }
 
-  if (!data) {
-    return (
-      <View style={styles.modalContent}>
-        <Text style={{ color: theme.colors.foregroundMuted }}>Loading system metrics…</Text>
-      </View>
-    );
-  }
+  const cpuStatus = resolveMetricStatus(data.cpuUsagePercent, CPU_THRESHOLDS);
+  const memStatus = resolveMetricStatus(data.memoryUsedPercent, MEM_THRESHOLDS);
 
-  const cpuColor =
-    data.cpuUsagePercent > 85
-      ? theme.colors.statusDanger
-      : data.cpuUsagePercent > 65
-      ? theme.colors.statusWarning
-      : theme.colors.statusSuccess;
-
-  const memColor =
-    data.memoryUsedPercent > 85
-      ? theme.colors.statusDanger
-      : data.memoryUsedPercent > 70
-      ? theme.colors.statusWarning
-      : theme.colors.accent;
-
-  return (
-    <View style={styles.modalContent}>
-      {/* Host Meta Banner */}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.colors.surface1,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
-        <View style={styles.metaRow}>
-          <View style={styles.metaCol}>
-            <Text style={[styles.metaLabel, { color: theme.colors.foregroundMuted }]}>
-              Host
-            </Text>
-            <Text
-              style={[styles.metaValue, { color: theme.colors.foreground }]}
-              numberOfLines={1}
-            >
-              {data.hostname}
-            </Text>
-          </View>
-          <View style={styles.metaCol}>
-            <Text style={[styles.metaLabel, { color: theme.colors.foregroundMuted }]}>
-              Uptime
-            </Text>
-            <Text style={[styles.metaValue, { color: theme.colors.foreground }]}>
-              {formatUptime(data.uptimeSeconds)}
-            </Text>
-          </View>
-        </View>
-
-        <View style={[styles.metaRow, { marginTop: 8 }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.metaLabel, { color: theme.colors.foregroundMuted }]}>
-              Processor
-            </Text>
-            <Text
-              style={[styles.metaSubValue, { color: theme.colors.foreground }]}
-              numberOfLines={1}
-            >
-              {data.cpuModel} ({data.cpuCores} cores)
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* CPU Section */}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.colors.surface1,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
-            CPU Utilization
-          </Text>
-          <Text style={[styles.metricHighlight, { color: cpuColor }]}>
-            {data.cpuUsagePercent}%
-          </Text>
-        </View>
-
-        <ProgressBar
-          value={data.cpuUsagePercent}
-          color={cpuColor}
-          bgColor={theme.colors.surface2}
-        />
-
-        <View style={styles.subStatsRow}>
-          <Text style={[styles.subStatLabel, { color: theme.colors.foregroundMuted }]}>
-            Load average (1m, 5m, 15m):
-          </Text>
-          <Text style={[styles.subStatValue, { color: theme.colors.foreground }]}>
-            {data.loadAvg.map((n) => n.toFixed(2)).join("  ")}
-          </Text>
-        </View>
-      </View>
-
-      {/* Memory Section */}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.colors.surface1,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>
-            Memory
-          </Text>
-          <Text style={[styles.metricHighlight, { color: memColor }]}>
-            {data.memoryUsedPercent}%
-          </Text>
-        </View>
-
-        <ProgressBar
-          value={data.memoryUsedPercent}
-          color={memColor}
-          bgColor={theme.colors.surface2}
-        />
-
-        <View style={styles.subStatsRow}>
-          <Text style={[styles.subStatLabel, { color: theme.colors.foregroundMuted }]}>
-            Used / Total:
-          </Text>
-          <Text style={[styles.subStatValue, { color: theme.colors.foreground }]}>
-            {formatBytes(data.memoryUsedBytes)} / {formatBytes(data.memoryTotalBytes)}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
+  return {
+    cpuColor: getStatusColor(cpuStatus, colors),
+    memColor: getStatusColor(memStatus, colors),
+  };
 }
 
-function ResourcePill({ theme, agentId }: PluginComposerPillProps) {
-  const fetchResources = useRpc(getSystemResourcesRpc);
-  const [data, setData] = useState<SystemResources | null>(null);
-  const [hasError, setHasError] = useState(false);
-  const [open, setOpen] = useState(false);
+export type PillItemType =
+  | "cpu_ram"
+  | "branch"
+  | "worktree"
+  | "agent_title"
+  | "agent"
+  | "agent_provider"
+  | "agent_activity"
+  | "agent_id"
+  | "load"
+  | "uptime"
+  | "mcp";
 
-  useEffect(() => {
-    openers.set(agentId, () => setOpen(true));
-    return () => {
-      openers.delete(agentId);
-    };
-  }, [agentId]);
+export type ModalTab = "system" | "context" | "settings" | "about";
 
-  useEffect(() => {
-    let active = true;
+export function getItemTab(item: PillItemType): "system" | "context" {
+  switch (item) {
+    case "cpu_ram":
+    case "load":
+    case "uptime":
+    case "mcp":
+      return "system";
+    case "branch":
+    case "worktree":
+    case "agent_title":
+    case "agent":
+    case "agent_provider":
+    case "agent_activity":
+    case "agent_id":
+      return "context";
+  }
+}
 
-    const poll = async () => {
-      try {
-        const res = await fetchResources({});
-        if (active) {
-          setData(res);
-          setHasError(false);
-        }
-      } catch {
-        if (active) {
-          setHasError(true);
-        }
-      }
-    };
+const currentCycleTabByAgent = new Map<string, ModalTab>();
 
-    poll();
-    const timer = setInterval(poll, 3000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [fetchResources]);
+interface PillItemContentProps {
+  item: PillItemType;
+  data?: SystemResources;
+  agent?: {
+    title?: string | null;
+    model?: string | null;
+    provider?: string;
+    status?: string;
+    lastActivityAt?: string;
+  } | null;
+  agentId?: string;
+  worktreeLocationText?: string;
+  isOpen?: boolean;
+}
 
-  const pillContent = useMemo(() => {
-    if (hasError) {
+function PillItemContent({
+  item,
+  data,
+  agent,
+  agentId,
+  worktreeLocationText,
+  isOpen,
+}: PillItemContentProps) {
+  const { colors } = usePluginTheme();
+  const { cpuColor, memColor } = getMetricColors(data, colors);
+
+  switch (item) {
+    case "branch":
       return (
-        <>
-          <Icon name="Ghost" size={13} color={theme.colors.statusDanger} />
+        <View style={styles.pillContainer}>
+          <Icon name="GitBranch" size={12} color={colors.accent} />
           <Text
             numberOfLines={1}
-            style={{ color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 }}
+            style={[
+              styles.pillText,
+              isOpen && styles.pillTextActive,
+              { color: colors.foreground, fontWeight: "600" },
+            ]}
           >
-            Offline
+            {data?.branch ?? "--"}
           </Text>
-        </>
+        </View>
+      );
+
+    case "worktree":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="Folder" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.pillText,
+              isOpen && styles.pillTextActive,
+              { color: colors.foreground, fontWeight: "600" },
+            ]}
+          >
+            {worktreeLocationText || "--"}
+          </Text>
+        </View>
+      );
+
+    case "agent_title":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="Bot" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.pillText,
+              isOpen && styles.pillTextActive,
+              { color: colors.foreground, fontWeight: "600" },
+            ]}
+          >
+            {agent?.title ?? "Agent"}
+          </Text>
+        </View>
+      );
+
+    case "agent":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="Cpu" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.pillText,
+              isOpen && styles.pillTextActive,
+              { color: colors.foreground, fontWeight: "600" },
+            ]}
+          >
+            {agent?.model || agent?.provider || "Agent"}
+          </Text>
+        </View>
+      );
+
+    case "agent_provider":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="Sparkles" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.pillText,
+              isOpen && styles.pillTextActive,
+              { color: colors.foreground, fontWeight: "600" },
+            ]}
+          >
+            {agent?.provider ?? "Provider"}
+          </Text>
+        </View>
+      );
+
+    case "agent_activity": {
+      const isRunning = agent?.status === "running";
+      const activityText = formatIdlePill(agent?.status, agent?.lastActivityAt);
+      return (
+        <View style={styles.pillContainer}>
+          <Icon
+            name={isRunning ? "Activity" : "Clock"}
+            size={12}
+            color={isRunning ? colors.statusSuccess : colors.foregroundMuted}
+          />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.pillText,
+              isOpen && styles.pillTextActive,
+              { color: isRunning ? colors.statusSuccess : colors.foreground, fontWeight: "600" },
+            ]}
+          >
+            {activityText}
+          </Text>
+        </View>
       );
     }
 
-    if (!data) {
+    case "agent_id":
       return (
-        <Text
-          numberOfLines={1}
-          style={{ color: theme.colors.foregroundMuted, fontSize: 11, flexShrink: 1 }}
+        <View style={styles.pillContainer}>
+          <Icon name="Fingerprint" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.pillText,
+              isOpen && styles.pillTextActive,
+              { color: colors.foreground, fontWeight: "600" },
+            ]}
+          >
+            {agentId && agentId.length > 7 ? agentId.slice(0, 7) : (agentId ?? "--")}
+          </Text>
+        </View>
+      );
+
+    case "load":
+      return (
+        <View style={styles.pillContainer}>
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: colors.foregroundMuted }}>{"load "}</Text>
+            <Text style={{ color: cpuColor, fontWeight: "600" }}>
+              {data?.loadAvg?.[0] !== undefined ? data.loadAvg[0].toFixed(2) : "--"}
+            </Text>
+          </Text>
+        </View>
+      );
+
+    case "uptime":
+      return (
+        <View style={styles.pillContainer}>
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: colors.foregroundMuted }}>{"up "}</Text>
+            <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+              {data?.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
+            </Text>
+          </Text>
+        </View>
+      );
+
+    case "mcp": {
+      const mcp = data?.mcp;
+      let dotChar = "○";
+      let dotColor = colors.foregroundMuted;
+      let text = "MCP -";
+
+      if (mcp && !mcp.isStale) {
+        dotChar = "●";
+        if (mcp.down > 0) {
+          dotColor = colors.statusDanger;
+        } else if (mcp.degraded > 0 || mcp.healthy !== mcp.total) {
+          dotColor = colors.statusWarning;
+        } else {
+          dotColor = colors.statusSuccess;
+        }
+        text = `${mcp.healthy}/${mcp.total} MCP`;
+      } else if (mcp && mcp.isStale) {
+        dotChar = "○";
+        dotColor = colors.foregroundMuted;
+        text = `${mcp.healthy}/${mcp.total} MCP`;
+      }
+
+      return (
+        <View
+          style={styles.pillContainer}
+          accessibilityLabel="MCP Server Health (via paseo-mcp-tools)"
         >
-          top…
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: dotColor, fontWeight: "700" }}>{dotChar} </Text>
+            <Text style={{ color: colors.foreground, fontWeight: "600" }}>{text}</Text>
+          </Text>
+        </View>
+      );
+    }
+
+    case "cpu_ram":
+    default: {
+      const ramGb =
+        data?.memoryUsedBytes !== undefined
+          ? formatBytes(data.memoryUsedBytes, { compact: true, decimals: 1 })
+          : "--";
+      const cpuText =
+        data?.cpuUsagePercent !== undefined ? `${data.cpuUsagePercent}%` : "--";
+      return (
+        <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+          <Text style={{ color: cpuColor, fontWeight: "600" }}>{cpuText}</Text>
+          <Text style={{ color: colors.foregroundMuted }}>{" · "}</Text>
+          <Text style={{ color: memColor, fontWeight: "600" }}>{ramGb}</Text>
         </Text>
       );
     }
+  }
+}
 
-    const cpuColor =
-      data.cpuUsagePercent >= 85
-        ? theme.colors.statusDanger
-        : data.cpuUsagePercent >= 60
-        ? theme.colors.statusWarning
-        : theme.colors.statusSuccess;
+type SettingsListener = (settings: TopSettings) => void;
+const settingsListeners = new Set<SettingsListener>();
 
-    const memColor =
-      data.memoryUsedPercent >= 85
-        ? theme.colors.statusDanger
-        : data.memoryUsedPercent >= 70
-        ? theme.colors.statusWarning
-        : theme.colors.statusSuccess;
+export function notifySettingsChanged(settings: TopSettings) {
+  for (const listener of settingsListeners) {
+    try {
+      listener(settings);
+    } catch {
+      // Ignore listener errors
+    }
+  }
+}
 
-    const ramGb = (data.memoryUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
+export interface SingleItemPillViewProps extends RenderPillProps<ModalTab> {
+  item: PillItemType;
+  defaultTab?: ModalTab;
+}
 
+export function SingleItemPillView({
+  item,
+  defaultTab,
+  workspaceId,
+  agentId,
+  isOpen,
+  open,
+}: SingleItemPillViewProps) {
+  const { colors } = usePluginTheme();
+  const workspaceDirectory = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.directory);
+  const agent = useAgent(agentId, (a: PluginAgentSnapshot) => ({
+    title: a?.title,
+    model: a?.model,
+    provider: a?.provider,
+    status: a?.status,
+    lastActivityAt: a?.lastActivityAt,
+  }));
+
+  const neededFields = useMemo(() => {
+    switch (item) {
+      case "cpu_ram":
+        return ["cpu", "memory"] as ResourceField[];
+      case "branch":
+        return workspaceDirectory ? (["branch"] as ResourceField[]) : [];
+    case "load":
+        return ["load"] as ResourceField[];
+      case "uptime":
+        return ["uptime"] as ResourceField[];
+      case "mcp":
+        return ["mcp"] as ResourceField[];
+      default:
+        return [] as ResourceField[];
+    }
+  }, [item, workspaceDirectory]);
+
+  const shouldPoll = neededFields.length > 0;
+
+  const queryParams = useMemo(() => {
+    return {
+      ...(workspaceDirectory ? { directory: workspaceDirectory } : {}),
+      ...(shouldPoll ? { fields: neededFields } : {}),
+    };
+  }, [workspaceDirectory, shouldPoll, neededFields]);
+
+  const { data, isError, isLoading } = useRpcQuery(
+    getSystemResourcesRpc,
+    queryParams,
+    {
+      enabled: shouldPoll,
+      refetchInterval: shouldPoll ? 3000 : false,
+    },
+  );
+
+  const worktreeLocationText = useMemo(
+    () => formatWorktreeLocation(workspaceDirectory),
+    [workspaceDirectory],
+  );
+
+  const targetTab = defaultTab ?? getItemTab(item);
+
+  if (item === "mcp") {
+    if (isLoading || !data || !data.mcpInstalled) {
+      return null;
+    }
+  }
+
+  if (shouldPoll && isError) {
     return (
-      <Text
-        numberOfLines={1}
-        style={{ fontSize: 11, flexShrink: 1 }}
+      <Pressable
+        onPress={() => open(targetTab)}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        style={styles.pillContainer}
       >
-        <Text style={{ color: cpuColor, fontWeight: "600" }}>{`${data.cpuUsagePercent}%`}</Text>
-        <Text style={{ color: theme.colors.foregroundMuted }}>{" · "}</Text>
-        <Text style={{ color: memColor, fontWeight: "600" }}>{`${ramGb}G`}</Text>
-      </Text>
+        <Icon name="Ghost" size={13} color={colors.statusDanger} />
+        <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+          Offline
+        </Text>
+      </Pressable>
     );
-  }, [data, hasError, theme.colors]);
+  }
+
+  if (shouldPoll && (isLoading || !data)) {
+    return (
+      <Pressable
+        onPress={() => open(targetTab)}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      >
+        <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+          top...
+        </Text>
+      </Pressable>
+    );
+  }
 
   return (
-    <>
-      {pillContent}
-      <Modal
-        title="Host System Resources"
-        icon={<Icon name="Activity" size={18} color={theme.colors.foreground} />}
-        open={open}
-        onOpenChange={setOpen}
-      >
-        <Modal.Content>
-          <ResourceModalContent theme={theme} initialData={data} />
-        </Modal.Content>
-      </Modal>
-    </>
+    <Pressable
+      onPress={() => open(targetTab)}
+      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      style={styles.cyclePressable}
+    >
+      <PillItemContent
+        item={item}
+        data={data}
+        agent={agent}
+        agentId={agentId}
+        worktreeLocationText={worktreeLocationText}
+        isOpen={isOpen}
+      />
+    </Pressable>
   );
 }
 
-export function contributeClient(client: PluginClientContext) {
-  const pills = new Map<string, () => void>();
+function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalTab>) {
+  const { colors } = usePluginTheme();
+  const { settings } = usePluginSettings(topSettingsContract, {
+    refetchInterval: 5000,
+  });
 
-  function addPill(agentId: string, workspaceId: string) {
-    if (pills.has(agentId)) return;
-    pills.set(
-      agentId,
-      client.addComposerPill({
-        id: "paseo-top",
-        title: "System Resources",
-        workspaceId,
-        agentId,
-        Component: ResourcePill,
-        onPress() {
-          const opener = openers.get(agentId);
-          if (opener) opener();
-        },
-      }),
+  useEffect(() => {
+    notifySettingsChanged(settings);
+  }, [settings]);
+
+  const workspaceDirectory = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => w?.directory);
+  const agent = useAgent(agentId, (a: PluginAgentSnapshot) => ({
+    title: a?.title,
+    model: a?.model,
+    provider: a?.provider,
+    status: a?.status,
+    lastActivityAt: a?.lastActivityAt,
+  }));
+
+  const hasAnyEnabled =
+    settings.showCpuRam ||
+    settings.showBranch ||
+    settings.showWorktree ||
+    settings.showAgentTitle ||
+    settings.showAgent ||
+    settings.showAgentProvider ||
+    settings.showAgentActivity ||
+    settings.showAgentId ||
+    settings.showLoad ||
+    settings.showUptime ||
+    (settings.showMcp ?? settings.mcp ?? true);
+
+  // If no items are selected, fallback to CPU & RAM without mutating saved settings
+  const effectiveShowCpuRam = settings.showCpuRam || !hasAnyEnabled;
+
+  const neededFields = useMemo(() => {
+    const fields: ResourceField[] = [];
+    if (effectiveShowCpuRam) {
+      fields.push("cpu", "memory");
+    }
+    if (settings.showBranch && workspaceDirectory) {
+      fields.push("branch");
+    }
+    if (settings.showLoad) {
+      fields.push("load");
+    }
+    if (settings.showUptime) {
+      fields.push("uptime");
+    }
+    if (settings.showMcp ?? settings.mcp ?? true) {
+      fields.push("mcp");
+    }
+    return fields;
+  }, [
+    effectiveShowCpuRam,
+    settings.showBranch,
+    settings.showLoad,
+    settings.showUptime,
+    settings.showMcp,
+    settings.mcp,
+    workspaceDirectory,
+  ]);
+
+  const shouldPoll = neededFields.length > 0;
+
+  const queryParams = useMemo(() => {
+    return {
+      ...(workspaceDirectory ? { directory: workspaceDirectory } : {}),
+      ...(shouldPoll ? { fields: neededFields } : {}),
+    };
+  }, [workspaceDirectory, shouldPoll, neededFields]);
+
+  const { data, isError, isLoading } = useRpcQuery(
+    getSystemResourcesRpc,
+    queryParams,
+    {
+      enabled: shouldPoll,
+      refetchInterval: shouldPoll ? 3000 : false,
+    },
+  );
+
+  const isMcpEnabled = (settings.showMcp ?? settings.mcp ?? true) && Boolean(data?.mcpInstalled);
+
+  const worktreeLocationText = useMemo(
+    () => formatWorktreeLocation(workspaceDirectory),
+    [workspaceDirectory],
+  );
+
+  // Collect available items enabled by user settings (or fallback to cpu_ram)
+  const items: PillItemType[] = [];
+  if (effectiveShowCpuRam) items.push("cpu_ram");
+  if (settings.showBranch) items.push("branch");
+  if (settings.showWorktree && workspaceDirectory) items.push("worktree");
+  if (settings.showAgentTitle && agent?.title) items.push("agent_title");
+  if (settings.showAgent && (agent?.model || agent?.provider)) items.push("agent");
+  if (settings.showAgentProvider && agent?.provider) items.push("agent_provider");
+  if (settings.showAgentActivity && (agent?.lastActivityAt || agent?.status)) items.push("agent_activity");
+  if (settings.showAgentId && agentId) items.push("agent_id");
+  if (settings.showLoad) items.push("load");
+  if (settings.showUptime) items.push("uptime");
+  if (isMcpEnabled) items.push("mcp");
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (items.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % items.length);
+    }, settings.intervalSeconds * 1000);
+    return () => clearInterval(timer);
+  }, [items.length, settings.intervalSeconds]);
+
+  const activeMode = items.length > 0 ? items[currentIndex % items.length] : "cpu_ram";
+  const activeTab = getItemTab(activeMode);
+
+  useEffect(() => {
+    currentCycleTabByAgent.set(agentId, activeTab);
+    return () => {
+      currentCycleTabByAgent.delete(agentId);
+    };
+  }, [agentId, activeTab]);
+
+  if (shouldPoll && isError) {
+    return (
+      <Pressable
+        onPress={() => open(settings.defaultTab ?? "system")}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        style={styles.pillContainer}
+      >
+        <Icon name="Ghost" size={13} color={colors.statusDanger} />
+        <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+          Offline
+        </Text>
+      </Pressable>
     );
   }
 
-  function removePill(agentId: string) {
-    pills.get(agentId)?.();
-    pills.delete(agentId);
-    openers.delete(agentId);
+  if (shouldPoll && (isLoading || !data)) {
+    return (
+      <Pressable
+        onPress={() => open(settings.defaultTab ?? "system")}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      >
+        <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+          top...
+        </Text>
+      </Pressable>
+    );
   }
 
-  const unsubscribe = client.paseo.agents.subscribe((update) => {
-    if (update.kind === "remove") {
-      removePill(update.agentId);
+  if (items.length === 0) {
+    return (
+      <Pressable
+        onPress={() => open(settings.defaultTab ?? "system")}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        style={styles.pillContainer}
+      >
+        <Icon name="Activity" size={12} color={colors.accent} />
+        <Text numberOfLines={1} style={[styles.pillText, { color: colors.foregroundMuted }]}>
+          top
+        </Text>
+      </Pressable>
+    );
+  }
+
+  if (settings.pillMode === "all") {
+    return (
+      <View style={styles.allInOneContainer}>
+        {items.map((item, idx) => {
+          const segmentTab = getItemTab(item);
+          return (
+            <React.Fragment key={item}>
+              {idx > 0 && <Text style={[styles.dividerText, { color: colors.foregroundMuted }]}>│</Text>}
+              <Pressable
+                onPress={() => open(segmentTab)}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                style={styles.segmentPressable}
+              >
+      <PillItemContent
+        item={item}
+        data={data}
+        agent={agent}
+        agentId={agentId}
+        worktreeLocationText={worktreeLocationText}
+        isOpen={isOpen}
+      />
+              </Pressable>
+            </React.Fragment>
+          );
+        })}
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={() => open(activeTab)}
+      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      style={styles.cyclePressable}
+    >
+      <PillItemContent
+        item={activeMode}
+        data={data}
+        agent={agent}
+        worktreeLocationText={worktreeLocationText}
+        isOpen={isOpen}
+      />
+    </Pressable>
+  );
+}
+
+interface ResourceModalProps extends RenderModalProps<ModalTab> {
+  initialTab?: ModalTab;
+}
+
+function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: ResourceModalProps) {
+  const { colors } = usePluginTheme();
+  const { settings, updateSettings, resetSettings, refetch: refetchSettings } = usePluginSettings(
+    topSettingsContract,
+    {
+      refetchInterval: 2000,
+    },
+  );
+  const { data: customPillList } = useRpcQuery(listCustomPillsRpc, EMPTY_PARAMS, {
+    refetchInterval: 5000,
+  });
+  const [selectedTab, setSelectedTab] = useState<ModalTab | null>(null);
+  const activeTab = selectedTab ?? payload ?? initialTab ?? settings.defaultTab ?? "system";
+
+  useEffect(() => {
+    if (payload) {
+      setSelectedTab(payload);
+    }
+  }, [payload]);
+
+  // Ensure freshest settings are fetched whenever user views settings
+  useEffect(() => {
+    if (activeTab === "settings") {
+      void refetchSettings();
+    }
+  }, [activeTab, refetchSettings]);
+
+  const workspace = useWorkspace(workspaceId, (w: PluginWorkspaceSnapshot) => ({
+    name: w?.name,
+    title: w?.title,
+    projectDisplayName: w?.projectDisplayName,
+    directory: w?.directory,
+    kind: w?.kind,
+    status: w?.status,
+    statusEnteredAt: w?.statusEnteredAt,
+    diffStat: w?.diffStat,
+  }));
+
+  const agent = useAgent(agentId, (a: PluginAgentSnapshot) => ({
+    title: a?.title,
+    model: a?.model,
+    provider: a?.provider,
+    status: a?.status,
+    cwd: a?.cwd,
+    lastActivityAt: a?.lastActivityAt,
+  }));
+
+  const queryParams = useMemo(() => {
+    return workspace?.directory ? { directory: workspace.directory } : EMPTY_PARAMS;
+  }, [workspace?.directory]);
+
+  const { data, isError, error, isLoading, isRefetching, refetch } = useAutoRefreshQuery(
+    getSystemResourcesRpc,
+    queryParams,
+    {
+      defaultRate: "2s",
+      isOpen: true,
+    },
+  );
+
+  const isMcpEnabled = (settings.showMcp ?? settings.mcp ?? true) && Boolean(data?.mcpInstalled);
+
+  const hasAnyPillEnabled =
+    settings.showCpuRam ||
+    settings.showBranch ||
+    settings.showWorktree ||
+    settings.showAgentTitle ||
+    settings.showAgent ||
+    settings.showAgentProvider ||
+    settings.showAgentActivity ||
+    settings.showAgentId ||
+    settings.showLoad ||
+    settings.showUptime ||
+    isMcpEnabled;
+
+  const handleRefresh = () => {
+    triggerHaptic("light");
+    refetch();
+    void refetchSettings();
+  };
+
+  const handleTabChange = (tabId: string) => {
+    triggerHaptic("light");
+    setSelectedTab(tabId as ModalTab);
+  };
+
+  if (isError && !data) {
+    return (
+      <ModalBody refreshing={isRefetching} onRefresh={handleRefresh}>
+        <Card variant="elevated">
+          <View style={styles.errorBox}>
+            <Icon name="Ghost" size={24} color={colors.statusDanger} />
+            <Text style={[styles.errorText, { color: colors.statusDanger }]}>
+              {error instanceof Error ? error.message : "Failed to load metrics"}
+            </Text>
+          </View>
+        </Card>
+      </ModalBody>
+    );
+  }
+
+  if (isLoading || !data) {
+    return (
+      <ModalBody refreshing={isRefetching} onRefresh={handleRefresh}>
+        <Text style={{ color: colors.foregroundMuted }}>Loading system metrics…</Text>
+      </ModalBody>
+    );
+  }
+
+  const { cpuColor, memColor } = getMetricColors(data, colors);
+
+  return (
+    <ModalBody refreshing={isRefetching} onRefresh={handleRefresh}>
+      {/* Navigation Tabs */}
+      <Tabs
+        tabs={TABS}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        style={styles.tabs}
+      />
+
+      {activeTab === "system" && (
+        <>
+          {/* Dual Metric Gauges Hero */}
+          <Card variant="elevated">
+            <View style={styles.gaugeContainer}>
+              <MetricGauge
+                value={data.cpuUsagePercent ?? 0}
+                thresholds={CPU_THRESHOLDS}
+                label="CPU Load"
+                size={82}
+              />
+              <MetricGauge
+                value={data.memoryUsedPercent ?? 0}
+                thresholds={MEM_THRESHOLDS}
+                label="RAM Used"
+                size={82}
+              />
+            </View>
+          </Card>
+
+          {/* Host Meta Card */}
+          <Card variant="elevated">
+            <KeyValueGroup columns={2}>
+              <KeyValue label="Host" value={data.hostname ?? "Unknown"} copyable />
+              <KeyValue
+                label="Uptime"
+                value={data.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
+              />
+            </KeyValueGroup>
+            <KeyValue
+              label="Processor"
+              value={data.cpuModel ?? "--"}
+              subValue={data.cpuCores ? `(${data.cpuCores} cores)` : undefined}
+            />
+          </Card>
+
+          {/* CPU Utilization Card */}
+          <Card variant="elevated">
+            <Card.Header
+              title="CPU Details"
+              value={
+                <Text style={[styles.metricHighlight, { color: cpuColor }]}>
+                  {data.cpuUsagePercent ?? 0}%
+                </Text>
+              }
+            />
+
+            <ProgressBar
+              value={data.cpuUsagePercent ?? 0}
+              thresholds={CPU_THRESHOLDS}
+              height={8}
+            />
+
+            <KeyValue
+              label="Load Average (1m, 5m, 15m)"
+              value={data.loadAvg ? data.loadAvg.map((n) => n.toFixed(2)).join("  ") : "--"}
+              mono
+            />
+          </Card>
+
+          {/* Memory Card */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Memory Details"
+              value={
+                <Text style={[styles.metricHighlight, { color: memColor }]}>
+                  {data.memoryUsedPercent ?? 0}%
+                </Text>
+              }
+            />
+
+            <ProgressBar
+              value={data.memoryUsedPercent ?? 0}
+              thresholds={MEM_THRESHOLDS}
+              height={8}
+            />
+
+            <KeyValue
+              label="Used / Total"
+              value={`${formatBytes(data.memoryUsedBytes ?? 0)} / ${formatBytes(data.memoryTotalBytes ?? 0)}`}
+            />
+          </Card>
+
+          {/* MCP Servers Card */}
+          {Boolean(data.mcpInstalled) && (
+            <Card variant="elevated">
+              <Card.Header
+                title="MCP Servers"
+                subtitle="Source: paseo-mcp-tools"
+                icon="Server"
+                value={
+                  data.mcp ? (
+                    <Badge
+                      label={data.mcp.isStale ? "Stale Snapshot" : "Live"}
+                      variant={data.mcp.isStale ? "warning" : "success"}
+                      dot
+                    />
+                  ) : (
+                    <Badge label="No Data" variant="neutral" />
+                  )
+                }
+              />
+
+              {data.mcp ? (
+                <>
+                  <KeyValueGroup columns={2}>
+                    <KeyValue
+                      label="Health"
+                      value={`${data.mcp.healthy} healthy / ${data.mcp.total} total`}
+                    />
+                    <KeyValue
+                      label="Snapshot Updated"
+                      value={formatTimeAgo(data.mcp.updatedAt)}
+                    />
+                    <KeyValue
+                      label="Data Provider"
+                      value="paseo-mcp-tools"
+                    />
+                  </KeyValueGroup>
+
+                  {data.mcp.servers && data.mcp.servers.length > 0 ? (
+                    <View style={styles.mcpList}>
+                      {data.mcp.servers.map((srv) => {
+                        const badgeVariant: "success" | "warning" | "danger" | "neutral" =
+                          srv.status === "healthy"
+                            ? "success"
+                            : srv.status === "degraded"
+                              ? "warning"
+                              : srv.status === "down"
+                                ? "danger"
+                                : "neutral";
+                        return (
+                          <View key={srv.name} style={styles.mcpRow}>
+                            <View style={styles.mcpInfo}>
+                              <Text
+                                numberOfLines={1}
+                                style={[styles.mcpName, { color: colors.foreground }]}
+                              >
+                                {srv.name}
+                              </Text>
+                              <Text style={[styles.mcpLatency, { color: colors.foregroundMuted }]}>
+                                {srv.latencyMs >= 0 ? `${srv.latencyMs}ms` : "timeout"}
+                              </Text>
+                            </View>
+                            <Badge label={srv.status} variant={badgeVariant} />
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={[styles.mcpEmpty, { color: colors.foregroundMuted }]}>
+                      No MCP servers configured
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text style={[styles.mcpEmpty, { color: colors.foregroundMuted }]}>
+                  Waiting for status snapshot from paseo-mcp-tools...
+                </Text>
+              )}
+            </Card>
+          )}
+
+          {/* Custom Metric Pills Card */}
+          {Boolean(data.customPills && data.customPills.length > 0) && (
+            <Card variant="elevated">
+              <Card.Header
+                title="Custom Metric Pills"
+                subtitle="Discovered from ~/.paseo/top/pills"
+                icon="Sliders"
+                value={
+                  <Badge
+                    label={`${data.customPills?.length ?? 0} active`}
+                    variant="accent"
+                  />
+                }
+              />
+              <KeyValueGroup columns={data.customPills!.length > 1 ? 2 : 1}>
+                {data.customPills!.map((cp) => (
+                  <KeyValue
+                    key={cp.id}
+                    label={cp.title}
+                    value={cp.displayValue}
+                    subValue={cp.status !== "neutral" ? `(${cp.status})` : undefined}
+                  />
+                ))}
+              </KeyValueGroup>
+            </Card>
+          )}
+        </>
+      )}
+
+      {activeTab === "context" && (
+        <>
+          {/* Workspace Information */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Workspace & Git"
+              icon="GitBranch"
+              value={
+                workspace?.status ? (
+                  <Badge label={workspace.status} variant="info" />
+                ) : undefined
+              }
+            />
+            <KeyValueGroup columns={2}>
+              <KeyValue label="Git Branch" value={data?.branch || "Unknown"} />
+              <KeyValue label="Kind" value={workspace?.kind || "Unknown"} />
+            </KeyValueGroup>
+            {workspace?.directory ? (
+              <KeyValue label="Worktree Location" value={workspace.directory} copyable mono />
+            ) : null}
+            {workspace?.name ? (
+              <KeyValue label="Workspace Name" value={workspace.name} />
+            ) : null}
+            {workspace?.title && workspace.title !== workspace.name ? (
+              <KeyValue label="Workspace Title" value={workspace.title} />
+            ) : null}
+            {workspace?.projectDisplayName ? (
+              <KeyValue label="Project" value={workspace.projectDisplayName} />
+            ) : null}
+            {workspace?.diffStat ? (
+              <KeyValue
+                label="Git Changes"
+                value={`+${workspace.diffStat.additions}  -${workspace.diffStat.deletions}`}
+              />
+            ) : null}
+          </Card>
+
+          {/* Agent Information */}
+          <Card variant="elevated">
+            <Card.Header
+              title={agent?.title ? `Agent: ${agent.title}` : "Agent Session"}
+              icon="Bot"
+              value={
+                agent?.status ? (
+                  <Badge
+                    label={agent.status}
+                    variant={agent.status === "running" ? "success" : "info"}
+                  />
+                ) : undefined
+              }
+            />
+            {agent?.title ? (
+              <KeyValue label="Agent Tab" value={agent.title} />
+            ) : null}
+            {agentId ? (
+              <KeyValue label="Agent ID" value={agentId} copyable mono />
+            ) : null}
+            <KeyValueGroup columns={2}>
+              <KeyValue label="Model" value={agent?.model || "Standard"} />
+              <KeyValue label="Provider" value={agent?.provider || "Default"} />
+            </KeyValueGroup>
+            <KeyValueGroup columns={2}>
+              <KeyValue
+                label="Last Worked"
+                value={
+                  agent?.status === "running"
+                    ? "Active now"
+                    : formatTimeAgo(agent?.lastActivityAt)
+                }
+              />
+              <KeyValue
+                label="Inactivity"
+                value={
+                  agent?.status === "running"
+                    ? "0s (active)"
+                    : formatIdleDuration(agent?.lastActivityAt)
+                }
+              />
+            </KeyValueGroup>
+            {agent?.cwd ? (
+              <KeyValue label="Working Directory" value={agent.cwd} copyable mono />
+            ) : null}
+          </Card>
+        </>
+      )}
+
+      {activeTab === "settings" && (
+        <>
+          {/* Pill Display Mode */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Pill Display Mode"
+              icon="LayoutGrid"
+              subtitle="How active items appear in the composer trackbar"
+            />
+            <View style={styles.modeRow}>
+              {[
+                { id: "cycle", label: "Cycle", desc: "Rotate one at a time" },
+                { id: "all", label: "All in One", desc: "Combined into one pill" },
+                { id: "multiple", label: "Multiple", desc: "Dedicated pills" },
+              ].map((modeOption) => {
+                const isSelected = (settings.pillMode ?? "cycle") === modeOption.id;
+                return (
+                  <View
+                    key={modeOption.id}
+                    style={[
+                      styles.modeCard,
+                      {
+                        backgroundColor: isSelected ? colors.surface1 : colors.surface0,
+                        borderColor: isSelected ? colors.accent : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      onPress={() => {
+                        triggerHaptic("light");
+                        const newSettings: TopSettings = {
+                          ...settings,
+                          pillMode: modeOption.id as PillMode,
+                        };
+                        updateSettings({ pillMode: modeOption.id as PillMode });
+                        notifySettingsChanged(newSettings);
+                      }}
+                      style={[
+                        styles.modeTitle,
+                        {
+                          color: isSelected ? colors.accent : colors.foreground,
+                          fontWeight: isSelected ? "700" : "500",
+                        },
+                      ]}
+                    >
+                      {modeOption.label}
+                    </Text>
+                    <Text style={[styles.modeDesc, { color: colors.foregroundMuted }]}>
+                      {modeOption.desc}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
+
+          {/* Active Pill Items Selectors */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Active Pill Items"
+              icon="Sliders"
+              subtitle={
+                !hasAnyPillEnabled
+                  ? "None selected -- automatically showing CPU & RAM"
+                  : (settings.pillMode ?? "cycle") === "multiple"
+                    ? "Choose which items appear as dedicated pills"
+                    : (settings.pillMode ?? "cycle") === "all"
+                      ? "Choose which items appear together in the pill"
+                      : "Choose which items cycle in the composer pill"
+              }
+            />
+            <View style={styles.settingsToggles}>
+              <Toggle
+                label="CPU & RAM Usage"
+                description="Live CPU load % and RAM used (e.g. 14% · 3.2G)"
+                value={settings.showCpuRam}
+                onValueChange={(val) => {
+                  const s = { ...settings, showCpuRam: val };
+                  updateSettings({ showCpuRam: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="Git Branch"
+                description="Active git branch name (e.g. main, feat/auth)"
+                value={settings.showBranch}
+                onValueChange={(val) => {
+                  const s = { ...settings, showBranch: val };
+                  updateSettings({ showBranch: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="Worktree Location"
+                description="Active workspace or worktree folder path"
+                value={settings.showWorktree}
+                onValueChange={(val) => {
+                  const s = { ...settings, showWorktree: val };
+                  updateSettings({ showWorktree: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="Agent Tab Title"
+                description="Active agent session title (e.g. Research architecture)"
+                value={settings.showAgentTitle}
+                onValueChange={(val) => {
+                  const s = { ...settings, showAgentTitle: val };
+                  updateSettings({ showAgentTitle: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="Agent Model"
+                description="Active LLM model name (e.g. claude-3-7-sonnet)"
+                value={settings.showAgent}
+                onValueChange={(val) => {
+                  const s = { ...settings, showAgent: val };
+                  updateSettings({ showAgent: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="Agent Provider"
+                description="LLM provider name (e.g. anthropic, openai)"
+                value={settings.showAgentProvider}
+                onValueChange={(val) => {
+                  const s = { ...settings, showAgentProvider: val };
+                  updateSettings({ showAgentProvider: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="Agent Activity / Idle"
+                description="Current status or inactivity duration (e.g. active, idle 4m)"
+                value={settings.showAgentActivity}
+                onValueChange={(val) => {
+                  const s = { ...settings, showAgentActivity: val };
+                  updateSettings({ showAgentActivity: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="Agent ID"
+                description="Agent session short ID (tap the pill for the full copyable ID)"
+                value={settings.showAgentId ?? true}
+                onValueChange={(val) => {
+                  const s = { ...settings, showAgentId: val };
+                  updateSettings({ showAgentId: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="System Load"
+                description="1-minute host load average (e.g. load 0.42)"
+                value={settings.showLoad}
+                onValueChange={(val) => {
+                  const s = { ...settings, showLoad: val };
+                  updateSettings({ showLoad: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="Host Uptime"
+                description="System uptime duration (e.g. up 3d 4h)"
+                value={settings.showUptime}
+                onValueChange={(val) => {
+                  const s = { ...settings, showUptime: val };
+                  updateSettings({ showUptime: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="MCP Server Health (via mcp-tools)"
+                description={
+                  Boolean(data?.mcpInstalled)
+                    ? "Live MCP server health snapshots from paseo-mcp-tools plugin"
+                    : "Requires paseo-mcp-tools plugin (not installed)"
+                }
+                value={settings.showMcp ?? settings.mcp ?? true}
+                disabled={!data?.mcpInstalled}
+                onValueChange={(val) => {
+                  const s = { ...settings, showMcp: val, mcp: val };
+                  updateSettings({ showMcp: val, mcp: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+            </View>
+          </Card>
+
+          {/* Custom Metric Pills */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Custom Metric Pills"
+              icon="Sliders"
+              subtitle="Standalone pills discovered from ~/.paseo/top/pills"
+            />
+            <View style={styles.settingsToggles}>
+              <Toggle
+                label="Show Custom Metric Pills"
+                description="Display pills defined in ~/.paseo/top/pills as standalone composer pills"
+                value={settings.showCustomPills ?? true}
+                onValueChange={(val) => {
+                  const s = { ...settings, showCustomPills: val };
+                  updateSettings({ showCustomPills: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              {(customPillList?.pills ?? []).map((pill) => {
+                const enabled = settings.customPillEnabled?.[pill.id] ?? pill.enabled;
+                return (
+                  <Toggle
+                    key={pill.id}
+                    label={pill.title}
+                    description={pill.sourceFile ?? "Config file in ~/.paseo/top/pills"}
+                    value={enabled}
+                    onValueChange={(val) => {
+                      const s = {
+                        ...settings,
+                        customPillEnabled: { ...settings.customPillEnabled, [pill.id]: val },
+                      };
+                      updateSettings({ customPillEnabled: s.customPillEnabled });
+                      notifySettingsChanged(s);
+                    }}
+                  />
+                );
+              })}
+            </View>
+          </Card>
+
+          {/* Rotation Speed Setting (Cycle mode only) */}
+          {(settings.pillMode ?? "cycle") === "cycle" && (
+            <Card variant="elevated">
+              <Card.Header
+                title="Rotation Speed"
+                icon="Clock"
+                value={
+                  <Text style={{ color: colors.accent, fontWeight: "600" }}>
+                    {`${settings.intervalSeconds}s`}
+                  </Text>
+                }
+              />
+              <View style={styles.speedRow}>
+                {[2, 3, 4, 6].map((sec) => (
+                  <View
+                    key={sec}
+                    style={[
+                      styles.speedChip,
+                      {
+                        backgroundColor:
+                          settings.intervalSeconds === sec ? colors.accent : colors.surface1,
+                        borderColor:
+                          settings.intervalSeconds === sec ? colors.accent : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      onPress={() => {
+                        triggerHaptic("light");
+                        updateSettings({ intervalSeconds: sec });
+                      }}
+                      style={[
+                        styles.speedChipText,
+                        {
+                          color:
+                            settings.intervalSeconds === sec
+                              ? colors.accentForeground
+                              : colors.foreground,
+                          fontWeight: settings.intervalSeconds === sec ? "700" : "500",
+                        },
+                      ]}
+                    >
+                      {`${sec}s`}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </Card>
+          )}
+
+          {/* Default Modal Tab Setting */}
+          <Card variant="elevated">
+            <Card.Header
+              title="Default Modal Tab"
+              icon="Sliders"
+              value={
+                <Text style={{ color: colors.accent, fontWeight: "600" }}>
+                  {TABS.find((t) => t.id === settings.defaultTab)?.label || "System"}
+                </Text>
+              }
+            />
+            <View style={styles.speedRow}>
+              {TABS.map((tab) => {
+                const isSelected = (settings.defaultTab || "system") === tab.id;
+                return (
+                  <View
+                    key={tab.id}
+                    style={[
+                      styles.speedChip,
+                      {
+                        flex: 1,
+                        backgroundColor: isSelected ? colors.accent : colors.surface1,
+                        borderColor: isSelected ? colors.accent : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      onPress={() => {
+                        triggerHaptic("light");
+                        updateSettings({
+                          defaultTab: tab.id as "system" | "context" | "settings" | "about",
+                        });
+                      }}
+                      style={[
+                        styles.speedChipText,
+                        {
+                          color: isSelected ? colors.accentForeground : colors.foreground,
+                          fontWeight: isSelected ? "700" : "500",
+                        },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
+
+          <Button
+            label="Reset to Defaults"
+            variant="secondary"
+            onPress={() => {
+              triggerHaptic("medium");
+              resetSettings();
+              notifySettingsChanged(topSettingsContract.defaultSettings);
+              setSelectedTab(null);
+            }}
+          />
+        </>
+      )}
+
+      {activeTab === "about" && (
+        <AboutSection
+          name="paseo-top"
+          description="Live host system and workspace monitor for Paseo composer trackbar."
+          version={data?.version ?? PLUGIN_VERSION}
+          author="xpufx"
+          repository="https://github.com/xpufx/paseo-top"
+          issues="https://github.com/xpufx/paseo-top/issues"
+          license="MIT"
+          extraItems={[
+            {
+              label: "Host Platform",
+              value: data?.platform ? `${data.platform} (${data.arch ?? "unknown"})` : "Linux",
+              copyable: true,
+            },
+            { label: "Host Name", value: data?.hostname ?? "localhost", copyable: true },
+            { label: "CPU Model", value: data?.cpuModel ?? "unknown", copyable: true },
+            {
+              label: "CPU Cores",
+              value: `${data?.cpuCores ?? 0} cores`,
+            },
+            {
+              label: "Total Memory",
+              value: data?.memoryTotalBytes ? formatBytes(data.memoryTotalBytes) : "unknown",
+            },
+            {
+              label: "Host Uptime",
+              value: data?.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "unknown",
+            },
+            { label: "Active Workspace", value: workspace?.name ?? "none", copyable: true },
+            { label: "Workspace Directory", value: workspace?.directory ?? "unknown", copyable: true },
+            { label: "Active Git Branch", value: data?.branch ?? "unknown", copyable: true },
+            { label: "Agent Model", value: agent?.model ?? "none", copyable: true },
+          ]}
+        />
+      )}
+
+      {/* Discrete Version Footer */}
+      {activeTab !== "about" && (
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: colors.foregroundMuted }]}>
+            top v{data?.version ?? PLUGIN_VERSION}
+          </Text>
+        </View>
+      )}
+    </ModalBody>
+  );
+}
+
+interface LiveCustomPillViewProps {
+  pillId: string;
+  initial: CustomPillState;
+}
+
+function LiveCustomPillView({ pillId, initial }: LiveCustomPillViewProps) {
+  const { data } = useRpcQuery(getCustomPillsRpc, EMPTY_PARAMS, { refetchInterval: 3000 });
+  const liveState = data?.pills.find((p) => p.id === pillId) ?? initial;
+  return <CustomPillBody state={liveState} />;
+}
+
+interface LiveCustomPillModalProps {
+  pillId: string;
+  initial: CustomPillStateOutput;
+}
+
+function LiveCustomPillModal({ pillId, initial }: LiveCustomPillModalProps) {
+  const { colors } = usePluginTheme();
+  const [refreshing, setRefreshing] = useState(false);
+  const [outputOverride, setOutputOverride] = useState<string | undefined>(undefined);
+  const { data, refetch } = useRpcQuery(getCustomPillsRpc, EMPTY_PARAMS, { refetchInterval: 3000 });
+  const liveState = data?.pills.find((p) => p.id === pillId) ?? initial;
+  const runModalCommand = useRpc(runCustomPillModalCommandRpc);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await runModalCommand({ pillId });
+      if (res?.output) {
+        setOutputOverride(res.output);
+      }
+      void refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Run the drilldown command once when the modal opens so it never shows stale pill output
+  const didInitialRun = useRef(false);
+  useEffect(() => {
+    if (didInitialRun.current) return;
+    didInitialRun.current = true;
+    void handleRefresh();
+  }, [pillId]);
+
+  const effectiveState: CustomPillStateOutput = {
+    ...liveState,
+    modalOutput: outputOverride ?? liveState.modalOutput,
+  };
+
+  return (
+    <View>
+      <CustomPillModalContent
+        state={effectiveState}
+        onRefresh={handleRefresh}
+        isRefreshing={refreshing}
+      />
+      <View style={styles.customPillHint}>
+        <Text style={[styles.footerText, { color: colors.foregroundMuted }]}>
+          Custom metric pill from paseo-top
+          {effectiveState.sourceFile ? ` - defined in ${effectiveState.sourceFile}` : ""}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+export function contributeClient(client: ComposerPillRegistrar | PluginClientContext) {
+  const activePills = new Map<string, () => void>();
+  let latestSettings: TopSettings = topSettingsContract.defaultSettings;
+
+  function syncPills(settings: TopSettings) {
+    latestSettings = settings;
+    const mode = settings.pillMode ?? "cycle";
+
+    if (mode === "cycle" || mode === "all") {
+      // Remove all single-item pills
+      for (const [key, cleanup] of activePills.entries()) {
+        if (key !== "paseo-top") {
+          cleanup();
+          activePills.delete(key);
+        }
+      }
+
+      // Ensure main pill is registered
+      if (!activePills.has("paseo-top")) {
+        const cleanup = registerComposerPill<ModalTab>(client, {
+          id: "paseo-top",
+          title: "top",
+          modalTitle: "Host System Resources",
+          modalIcon: "Activity",
+          resolveDefaultPayload: ({ agentId }) => {
+            if (latestSettings.pillMode === "all") {
+              return latestSettings.defaultTab;
+            }
+            return currentCycleTabByAgent.get(agentId) ?? latestSettings.defaultTab;
+          },
+          renderPill: (props) => <PillView {...props} />,
+          renderModal: (props) => <ResourceModal {...props} />,
+        });
+        activePills.set("paseo-top", cleanup);
+      }
+    } else if (mode === "multiple") {
+      // Remove main pill
+      if (activePills.has("paseo-top")) {
+        activePills.get("paseo-top")!();
+        activePills.delete("paseo-top");
+      }
+
+      const hasAny =
+        settings.showCpuRam ||
+        settings.showBranch ||
+        settings.showWorktree ||
+        settings.showAgentTitle ||
+        settings.showAgent ||
+        settings.showAgentProvider ||
+        settings.showAgentActivity ||
+        settings.showAgentId ||
+        settings.showLoad ||
+        settings.showUptime;
+
+      const effectiveCpu = settings.showCpuRam || !hasAny;
+
+      const desiredPills: {
+        id: string;
+        item: PillItemType;
+        title: string;
+        modalTitle: string;
+        defaultTab: "system" | "context";
+      }[] = [];
+
+      if (effectiveCpu) {
+        desiredPills.push({
+          id: "paseo-top-cpu",
+          item: "cpu_ram",
+          title: "CPU & RAM",
+          modalTitle: "Host System Resources",
+          defaultTab: "system",
+        });
+      }
+      if (settings.showBranch) {
+        desiredPills.push({
+          id: "paseo-top-branch",
+          item: "branch",
+          title: "Git Branch",
+          modalTitle: "Host System Resources",
+          defaultTab: "context",
+        });
+      }
+      if (settings.showWorktree) {
+        desiredPills.push({
+          id: "paseo-top-worktree",
+          item: "worktree",
+          title: "Worktree",
+          modalTitle: "Host System Resources",
+          defaultTab: "context",
+        });
+      }
+      if (settings.showAgentTitle) {
+        desiredPills.push({
+          id: "paseo-top-agent-title",
+          item: "agent_title",
+          title: "Agent Tab",
+          modalTitle: "Host System Resources",
+          defaultTab: "context",
+        });
+      }
+      if (settings.showAgent) {
+        desiredPills.push({
+          id: "paseo-top-agent",
+          item: "agent",
+          title: "Agent Model",
+          modalTitle: "Host System Resources",
+          defaultTab: "context",
+        });
+      }
+      if (settings.showAgentProvider) {
+        desiredPills.push({
+          id: "paseo-top-agent-provider",
+          item: "agent_provider",
+          title: "Provider",
+          modalTitle: "Host System Resources",
+          defaultTab: "context",
+        });
+      }
+      if (settings.showAgentActivity) {
+        desiredPills.push({
+          id: "paseo-top-agent-activity",
+          item: "agent_activity",
+          title: "Activity",
+          modalTitle: "Host System Resources",
+          defaultTab: "context",
+        });
+      }
+      if (settings.showAgentId ?? true) {
+        desiredPills.push({
+          id: "paseo-top-agent-id",
+          item: "agent_id",
+          title: "Agent ID",
+          modalTitle: "Host System Resources",
+          defaultTab: "context",
+        });
+      }
+      if (settings.showLoad) {
+        desiredPills.push({
+          id: "paseo-top-load",
+          item: "load",
+          title: "Load",
+          modalTitle: "Host System Resources",
+          defaultTab: "system",
+        });
+      }
+      if (settings.showUptime) {
+        desiredPills.push({
+          id: "paseo-top-uptime",
+          item: "uptime",
+          title: "Uptime",
+          modalTitle: "Host System Resources",
+          defaultTab: "system",
+        });
+      }
+      if (settings.showMcp ?? settings.mcp ?? true) {
+        desiredPills.push({
+          id: "paseo-top-mcp",
+          item: "mcp",
+          title: "MCP Health",
+          modalTitle: "Host System Resources",
+          defaultTab: "system",
+        });
+      }
+
+      const desiredIds = new Set(desiredPills.map((p) => p.id));
+
+      // Remove pills no longer desired
+      for (const [key, cleanup] of activePills.entries()) {
+        if (!desiredIds.has(key)) {
+          cleanup();
+          activePills.delete(key);
+        }
+      }
+
+      // Register newly desired pills
+      for (const pillDef of desiredPills) {
+        if (!activePills.has(pillDef.id)) {
+          const cleanup = registerComposerPill<ModalTab>(client, {
+            id: pillDef.id,
+            title: pillDef.title,
+            modalTitle: pillDef.modalTitle,
+            modalIcon: "Activity",
+            resolveDefaultPayload: () => pillDef.defaultTab,
+            renderPill: (props) => (
+              <SingleItemPillView
+                item={pillDef.item}
+                defaultTab={pillDef.defaultTab}
+                {...props}
+              />
+            ),
+            renderModal: (props) => (
+              <ResourceModal initialTab={pillDef.defaultTab} {...props} />
+            ),
+          });
+          activePills.set(pillDef.id, cleanup);
+        }
+      }
+    }
+  }
+
+  // Register settings listener
+  settingsListeners.add(syncPills);
+
+  // Initial sync synchronously
+  syncPills(topSettingsContract.defaultSettings);
+
+  // Query settings from daemon if client supports rpc
+  const clientWithRpc = client as {
+    rpc?: (contract: any, input: any) => Promise<any>;
+  };
+  if (typeof clientWithRpc.rpc === "function") {
+    void clientWithRpc
+      .rpc(topSettingsContract.get, {})
+      .then((fetchedSettings: any) => {
+        if (fetchedSettings) {
+          syncPills(fetchedSettings as TopSettings);
+        }
+      })
+      .catch(() => {
+        // Ignore initial get errors
+      });
+  }
+
+  // Dynamic discovery and lifecycle management for user custom metric pills
+  const activeCustomPills = new Map<string, () => void>();
+
+  async function syncCustomPills() {
+    const showCustom = latestSettings.showCustomPills ?? true;
+    if (!showCustom) {
+      // Master toggle off: unregister all custom pills
+      for (const [id, cleanup] of activeCustomPills.entries()) {
+        cleanup();
+        activeCustomPills.delete(id);
+      }
       return;
     }
-    const { id, workspaceId } = update.agent;
-    if (workspaceId) addPill(id, workspaceId);
-  });
 
-  client.paseo.agents
-    .list()
-    .then((result) => {
-      result.entries.forEach(({ agent }) => {
-        if (agent.workspaceId) addPill(agent.id, agent.workspaceId);
-      });
-    })
-    .catch((err) => console.error("paseo-top: seed pills failed", err));
+    try {
+      if (typeof clientWithRpc.rpc !== "function") return;
+      const res = await clientWithRpc.rpc(getCustomPillsRpc, EMPTY_PARAMS);
+      const pills: CustomPillStateOutput[] = res?.pills ?? [];
+      const pillIds = new Set(pills.map((p: CustomPillStateOutput) => p.id));
+
+      // Remove pills that are no longer configured
+      for (const [id, cleanup] of activeCustomPills.entries()) {
+        if (!pillIds.has(id)) {
+          cleanup();
+          activeCustomPills.delete(id);
+        }
+      }
+
+      // Register newly discovered custom metric pills
+      for (const pill of pills) {
+        if (!activeCustomPills.has(pill.id)) {
+          const cleanup = registerComposerPill(client, {
+            id: `top-custom-${pill.id}`,
+            title: pill.title,
+            compactTitle: pill.compactTitle,
+            icon: pill.icon,
+            compactIcon: pill.compactIcon,
+            modalTitle: pill.modalTitle ?? pill.title,
+            renderPill: () => <LiveCustomPillView pillId={pill.id} initial={pill} />,
+            renderModal: () => (
+              <LiveCustomPillModal pillId={pill.id} initial={pill} />
+            ),
+          });
+          activeCustomPills.set(pill.id, cleanup);
+        }
+      }
+    } catch {
+      // Ignore initial get errors
+    }
+  }
+
+  void syncCustomPills();
+  const customPillInterval = setInterval(syncCustomPills, 5000);
+  const onSettingsChanged = () => {
+    void syncCustomPills();
+  };
+  settingsListeners.add(onSettingsChanged);
 
   return () => {
-    unsubscribe();
-    pills.forEach((remove) => remove());
-    pills.clear();
-    openers.clear();
+    clearInterval(customPillInterval);
+    settingsListeners.delete(syncPills);
+    settingsListeners.delete(onSettingsChanged);
+    for (const cleanup of activePills.values()) {
+      cleanup();
+    }
+    activePills.clear();
+    for (const cleanup of activeCustomPills.values()) {
+      cleanup();
+    }
+    activeCustomPills.clear();
   };
 }
 
 const styles = StyleSheet.create({
-  modalContent: {
-    padding: 16,
-    gap: 12,
-  },
-  card: {
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 12,
-  },
-  metaRow: {
+  pillContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  metaCol: {
-    flex: 1,
-  },
-  metaLabel: {
-    fontSize: 11,
-    marginBottom: 2,
-    textTransform: "uppercase",
-  },
-  metaValue: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  metaSubValue: {
-    fontSize: 12,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    gap: 4,
+    overflow: "hidden",
+    flexShrink: 1,
+    minWidth: 0,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
+  pillText: {
+    fontSize: 11,
+    flexShrink: 1,
+  },
+  pillTextActive: {
+    opacity: 0.85,
   },
   metricHighlight: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
   },
-  progressTrack: {
-    height: 8,
-    borderRadius: 4,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  progressBar: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  subStatsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  footer: {
     alignItems: "center",
-    marginTop: 2,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
-  subStatLabel: {
-    fontSize: 11,
+  customPillHint: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 12,
   },
-  subStatValue: {
-    fontSize: 11,
-    fontWeight: "500",
+  footerText: {
+    fontSize: 10,
+    opacity: 0.65,
+    fontFamily: "monospace",
   },
   errorBox: {
     padding: 24,
@@ -477,5 +1961,106 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  tabs: {
+    marginBottom: 4,
+  },
+  gaugeContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  settingsToggles: {
+    gap: 8,
+  },
+  speedRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  speedChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  speedChipText: {
+    fontSize: 13,
+  },
+  allInOneContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    overflow: "hidden",
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  segmentPressable: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+  },
+  cyclePressable: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+  },
+  dividerText: {
+    fontSize: 10,
+    opacity: 0.6,
+  },
+  modeRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  modeCard: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+  },
+  modeTitle: {
+    fontSize: 13,
+  },
+  modeDesc: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  mcpList: {
+    gap: 8,
+    marginTop: 4,
+  },
+  mcpRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  mcpInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  mcpName: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  mcpLatency: {
+    fontSize: 11,
+    fontFamily: "monospace",
+  },
+  mcpEmpty: {
+    fontSize: 12,
+    fontStyle: "italic",
+    paddingVertical: 4,
   },
 });

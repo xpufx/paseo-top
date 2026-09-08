@@ -1,17 +1,23 @@
 {
   "name": "top",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "build": "node -e \"import('paseo-plugin-helper/server').then(m => m.stampVersion())\"",
+    "pretypecheck": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck"
   },
   "devDependencies": {
-    "@getpaseo/plugin": "0.7.2",
+    "@getpaseo/plugin": "0.8.0-beta.1",
     "@tanstack/react-query": "^5.90.11",
     "@types/react": "~19.2.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "typescript": "^5.9.3",
     "zod": "^4.4.3"
+  },
+  "dependencies": {
+    "paseo-plugin-helper": "^0.4.0-beta.2"
   }
 }

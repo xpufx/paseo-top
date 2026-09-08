@@ -1,0 +1,22 @@
+// Count of running Docker containers
+// Drop into ~/.paseo/top/pills/ to enable
+{
+  "id": "docker-containers",
+  "title": "Docker",
+  "compactTitle": "Docker",
+  "icon": "Box",
+  "command": "docker ps -q 2>/dev/null | wc -l",
+  "suffix": " running",
+  "intervalMs": 5000,
+  "timeoutMs": 3000,
+  "thresholds": {
+    "warning": 10,
+    "danger": 20
+  },
+  "modal": {
+    "title": "Running Docker Containers",
+    "description": "Live container status via docker ps",
+    "command": "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'",
+    "preformatted": true
+  }
+}
