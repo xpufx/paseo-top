@@ -157,6 +157,7 @@ export type PillItemType =
   | "agent"
   | "agent_provider"
   | "agent_activity"
+  | "agent_id"
   | "load"
   | "uptime"
   | "mcp";
@@ -176,6 +177,7 @@ export function getItemTab(item: PillItemType): "system" | "context" {
     case "agent":
     case "agent_provider":
     case "agent_activity":
+    case "agent_id":
       return "context";
   }
 }
@@ -192,6 +194,7 @@ interface PillItemContentProps {
     status?: string;
     lastActivityAt?: string;
   } | null;
+  agentId?: string;
   worktreeLocationText?: string;
   isOpen?: boolean;
 }
@@ -200,6 +203,7 @@ function PillItemContent({
   item,
   data,
   agent,
+  agentId,
   worktreeLocationText,
   isOpen,
 }: PillItemContentProps) {
@@ -315,6 +319,23 @@ function PillItemContent({
         </View>
       );
     }
+
+    case "agent_id":
+      return (
+        <View style={styles.pillContainer}>
+          <Icon name="Fingerprint" size={12} color={colors.accent} />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.pillText,
+              isOpen && styles.pillTextActive,
+              { color: colors.foreground, fontWeight: "600" },
+            ]}
+          >
+            {agentId && agentId.length > 7 ? agentId.slice(0, 7) : (agentId ?? "--")}
+          </Text>
+        </View>
+      );
 
     case "load":
       return (
@@ -436,7 +457,7 @@ export function SingleItemPillView({
         return ["cpu", "memory"] as ResourceField[];
       case "branch":
         return workspaceDirectory ? (["branch"] as ResourceField[]) : [];
-      case "load":
+    case "load":
         return ["load"] as ResourceField[];
       case "uptime":
         return ["uptime"] as ResourceField[];
@@ -516,6 +537,7 @@ export function SingleItemPillView({
         item={item}
         data={data}
         agent={agent}
+        agentId={agentId}
         worktreeLocationText={worktreeLocationText}
         isOpen={isOpen}
       />
@@ -550,6 +572,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
     settings.showAgent ||
     settings.showAgentProvider ||
     settings.showAgentActivity ||
+    settings.showAgentId ||
     settings.showLoad ||
     settings.showUptime ||
     (settings.showMcp ?? settings.mcp ?? true);
@@ -619,6 +642,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
   if (settings.showAgent && (agent?.model || agent?.provider)) items.push("agent");
   if (settings.showAgentProvider && agent?.provider) items.push("agent_provider");
   if (settings.showAgentActivity && (agent?.lastActivityAt || agent?.status)) items.push("agent_activity");
+  if (settings.showAgentId && agentId) items.push("agent_id");
   if (settings.showLoad) items.push("load");
   if (settings.showUptime) items.push("uptime");
   if (isMcpEnabled) items.push("mcp");
@@ -699,13 +723,14 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
                 hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                 style={styles.segmentPressable}
               >
-                <PillItemContent
-                  item={item}
-                  data={data}
-                  agent={agent}
-                  worktreeLocationText={worktreeLocationText}
-                  isOpen={isOpen}
-                />
+      <PillItemContent
+        item={item}
+        data={data}
+        agent={agent}
+        agentId={agentId}
+        worktreeLocationText={worktreeLocationText}
+        isOpen={isOpen}
+      />
               </Pressable>
             </React.Fragment>
           );
@@ -805,6 +830,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
     settings.showAgent ||
     settings.showAgentProvider ||
     settings.showAgentActivity ||
+    settings.showAgentId ||
     settings.showLoad ||
     settings.showUptime ||
     isMcpEnabled;
@@ -1101,6 +1127,9 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
             {agent?.title ? (
               <KeyValue label="Agent Tab" value={agent.title} />
             ) : null}
+            {agentId ? (
+              <KeyValue label="Agent ID" value={agentId} copyable mono />
+            ) : null}
             <KeyValueGroup columns={2}>
               <KeyValue label="Model" value={agent?.model || "Standard"} />
               <KeyValue label="Provider" value={agent?.provider || "Default"} />
@@ -1269,6 +1298,16 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                 onValueChange={(val) => {
                   const s = { ...settings, showAgentActivity: val };
                   updateSettings({ showAgentActivity: val });
+                  notifySettingsChanged(s);
+                }}
+              />
+              <Toggle
+                label="Agent ID"
+                description="Agent session short ID (tap the pill for the full copyable ID)"
+                value={settings.showAgentId ?? true}
+                onValueChange={(val) => {
+                  const s = { ...settings, showAgentId: val };
+                  updateSettings({ showAgentId: val });
                   notifySettingsChanged(s);
                 }}
               />
@@ -1628,6 +1667,7 @@ export function contributeClient(client: PluginClientContext) {
         settings.showAgent ||
         settings.showAgentProvider ||
         settings.showAgentActivity ||
+        settings.showAgentId ||
         settings.showLoad ||
         settings.showUptime;
 
@@ -1700,6 +1740,15 @@ export function contributeClient(client: PluginClientContext) {
           id: "paseo-top-agent-activity",
           item: "agent_activity",
           title: "Activity",
+          modalTitle: "Host System Resources",
+          defaultTab: "context",
+        });
+      }
+      if (settings.showAgentId ?? true) {
+        desiredPills.push({
+          id: "paseo-top-agent-id",
+          item: "agent_id",
+          title: "Agent ID",
           modalTitle: "Host System Resources",
           defaultTab: "context",
         });

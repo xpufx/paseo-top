@@ -140,6 +140,7 @@ export const TopSettingsSchema = z.object({
   showAgent: z.boolean().default(false),
   showAgentProvider: z.boolean().default(false),
   showAgentActivity: z.boolean().default(false),
+  showAgentId: z.boolean().default(true),
   showLoad: z.boolean().default(false),
   showUptime: z.boolean().default(false),
   showMcp: z.boolean().default(true),
