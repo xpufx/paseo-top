@@ -63,12 +63,14 @@ export default function contribute(server: PluginServerContext) {
 
       let agentModel: string | null = null;
       let agentProvider: string | null = event.agent.provider ?? null;
+      let agentTitle: string | null = event.agent.title ?? null;
       try {
         const refetched = await context.paseo.agents.ref(event.agent.id).refresh();
         agentModel = refetched?.agent?.model ?? agentModel;
         agentProvider = refetched?.agent?.provider ?? agentProvider;
+        agentTitle = refetched?.agent?.title ?? agentTitle;
       } catch {
-        // Model and provider stay at event snapshot values; the card renders placeholders
+        // Model, provider, and title stay at event snapshot values; the card renders placeholders
       }
 
       const telemetry = await collectTurnTelemetry(
@@ -79,7 +81,7 @@ export default function contribute(server: PluginServerContext) {
         {
           cwd: event.agent.cwd,
           provider: agentProvider,
-          title: event.agent.title,
+          title: agentTitle,
           model: agentModel,
           timeline: event.timeline,
           gitBefore: gitBefore ?? null,
