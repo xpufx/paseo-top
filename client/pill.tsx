@@ -941,21 +941,27 @@ function MetricSurfaceMatrix({
                     ? "Requires paseo-mcp-tools plugin (not installed)"
                     : def.description}
             </Text>
-            <View style={{ flexDirection: "row", gap: 16, paddingLeft: 4 }}>
-              <Toggle
-                label="Pill"
-                labelStyle={{ fontSize: 11 }}
-                value={boxes.pill}
-                disabled={disabled}
-                onValueChange={(val) => setBox("pill", val)}
-              />
-              <Toggle
-                label="Timeline"
-                labelStyle={{ fontSize: 11 }}
-                value={boxes.timeline && !def.pillOnly}
-                disabled={disabled || timelineDisabled}
-                onValueChange={(val) => setBox("timeline", val)}
-              />
+            <View style={{ flexDirection: "row", gap: 24, paddingLeft: 4 }}>
+              <View style={{ alignItems: "flex-start", gap: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foregroundMuted }}>
+                  Pill
+                </Text>
+                <Toggle
+                  value={boxes.pill}
+                  disabled={disabled}
+                  onValueChange={(val) => setBox("pill", val)}
+                />
+              </View>
+              <View style={{ alignItems: "flex-start", gap: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foregroundMuted }}>
+                  Timeline
+                </Text>
+                <Toggle
+                  value={boxes.timeline && !def.pillOnly}
+                  disabled={disabled || timelineDisabled}
+                  onValueChange={(val) => setBox("timeline", val)}
+                />
+              </View>
             </View>
           </View>
         );
