@@ -351,6 +351,16 @@ export function isCoreTimelineMetric(metricId: MetricId): boolean {
   return (CORE_TIMELINE_METRICS as readonly string[]).includes(metricId);
 }
 
+export const PROVIDER_DEPENDENT_METRICS: readonly MetricId[] = [
+  "tokens",
+  "agent",
+  "agent_provider",
+];
+
+export function isProviderDependent(metricId: MetricId): boolean {
+  return (PROVIDER_DEPENDENT_METRICS as readonly string[]).includes(metricId);
+}
+
 export interface LegacyFlagView {
   showCpuRam: boolean;
   showBranch: boolean;
@@ -512,6 +522,7 @@ export const TopSettingsSchema = z.preprocess(
     mcp: z.boolean().optional(),
     showCustomPills: z.boolean().default(true),
     customPillEnabled: z.record(z.string(), z.boolean()).default({}),
+    provisionedMetrics: z.array(MetricIdSchema).default([]),
     recordTurnTelemetry: z.boolean().optional(),
     intervalSeconds: z.number().min(1).max(60).default(3),
     defaultTab: z.enum(["system", "context", "settings", "about"]).default("system"),

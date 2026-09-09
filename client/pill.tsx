@@ -50,6 +50,7 @@ import {
   listCustomPillsRpc,
   runCustomPillModalCommandRpc,
   isPillEnabled,
+  isProviderDependent,
   legacyFlagView,
   METRIC_DEFINITIONS,
   DEFAULT_METRIC_SURFACES,
@@ -598,7 +599,7 @@ export function SingleItemPillView({
 
 function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalTab>) {
   const { colors } = usePluginTheme();
-  const { settings } = usePluginSettings(topSettingsContract, {
+  const { settings, updateSettings } = usePluginSettings(topSettingsContract, {
     refetchInterval: 5000,
   });
   const flags = legacyFlagView(settings);
@@ -679,6 +680,26 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
   );
 
   const isMcpEnabled = (flags.showMcp) && Boolean(data?.mcpInstalled);
+
+  useEffect(() => {
+    const found: MetricId[] = [];
+    const last = data?.lastTurn;
+    if (last && (last.inputTokens != null || last.outputTokens != null)) {
+      found.push("tokens");
+    }
+    if (agent?.model || agent?.provider) {
+      found.push("agent", "agent_provider");
+    }
+    if (found.length > 0) {
+      const have = new Set(settings.provisionedMetrics ?? []);
+      if (found.some((id) => !have.has(id))) {
+        updateSettings({
+          provisionedMetrics: [...have, ...found.filter((id) => !have.has(id))],
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.lastTurn, agent?.model, agent?.provider]);
 
   const worktreeLocationText = useMemo(
     () => formatWorktreeLocation(workspaceDirectory),
@@ -831,6 +852,7 @@ function MetricSurfaceMatrix({
 }) {
   const { colors } = usePluginTheme();
   const surfaces = settings.metricSurfaces ?? DEFAULT_METRIC_SURFACES;
+  const provisioned = new Set(settings.provisionedMetrics ?? []);
   const setTarget = (id: MetricId, target: SurfaceTarget) => {
     const next = { ...surfaces, [id]: target };
     const s = { ...settings, metricSurfaces: next };
@@ -841,7 +863,9 @@ function MetricSurfaceMatrix({
     <View style={{ gap: 12 }}>
       {METRIC_DEFINITIONS.map((def) => {
         const boxes = checkboxesFromTarget(surfaces[def.id]);
-        const disabled = def.id === "mcp" && !mcpInstalled;
+        const unavailable =
+          isProviderDependent(def.id) && !provisioned.has(def.id);
+        const disabled = (def.id === "mcp" && !mcpInstalled) || unavailable;
         const setBox = (which: "pill" | "timeline", val: boolean) => {
           const nextBoxes = { ...boxes, [which]: val };
           setTarget(
@@ -850,7 +874,7 @@ function MetricSurfaceMatrix({
           );
         };
         return (
-          <View key={def.id}>
+          <View key={def.id} style={unavailable ? { opacity: 0.55 } : undefined}>
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}
             >
@@ -861,9 +885,11 @@ function MetricSurfaceMatrix({
             <Text
               style={{ fontSize: 11, color: colors.foregroundMuted, marginBottom: 6 }}
             >
-              {def.id === "mcp" && !mcpInstalled
-                ? "Requires paseo-mcp-tools plugin (not installed)"
-                : def.description}
+              {unavailable
+                ? "Not available for this provider yet"
+                : def.id === "mcp" && !mcpInstalled
+                  ? "Requires paseo-mcp-tools plugin (not installed)"
+                  : def.description}
             </Text>
             <View style={{ flexDirection: "row", gap: 16 }}>
               <Toggle

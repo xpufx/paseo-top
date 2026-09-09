@@ -30,14 +30,14 @@ export function TopTimelineTelemetryCard({
         borderRadius: 8,
         borderWidth: 1,
         borderColor: isFailed ? theme.colors.statusDanger : theme.colors.border,
-        padding: layout.compact ? 8 : 12,
-        marginVertical: 4,
+        padding: layout.compact ? 6 : 8,
+        marginVertical: 2,
       },
       header: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 8,
+        marginBottom: 4,
       },
       headerLeft: {
         flexDirection: "row",
@@ -67,7 +67,7 @@ export function TopTimelineTelemetryCard({
       footerRow: {
         flexDirection: "row",
         justifyContent: "flex-end",
-        marginTop: 6,
+        marginTop: 2,
       },
       footerText: {
         fontSize: 9,
@@ -78,7 +78,7 @@ export function TopTimelineTelemetryCard({
         flexDirection: "row",
         flexWrap: "wrap",
         alignItems: "center",
-        gap: 12,
+        gap: 8,
       },
       vitalChip: {
         flexDirection: "row",
