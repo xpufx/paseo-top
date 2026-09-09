@@ -913,12 +913,14 @@ function MetricSurfaceMatrix({
             <View style={{ flexDirection: "row", gap: 16, paddingLeft: 4 }}>
               <Toggle
                 label="Pill"
+                labelStyle={{ fontSize: 11 }}
                 value={boxes.pill}
                 disabled={disabled}
                 onValueChange={(val) => setBox("pill", val)}
               />
               <Toggle
                 label="Timeline"
+                labelStyle={{ fontSize: 11 }}
                 value={boxes.timeline && !def.pillOnly}
                 disabled={disabled || timelineDisabled}
                 onValueChange={(val) => setBox("timeline", val)}
