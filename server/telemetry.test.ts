@@ -13,6 +13,7 @@ import {
   METRIC_DEFINITIONS,
   PILL_RENDERED_METRICS,
   TIMELINE_RENDERED_METRICS,
+  DEFAULT_METRIC_SURFACES,
 } from "../shared/resources";
 import { collectTurnTelemetry, customPillPoller, parseGitDiffShortstat, summarizeTurnTimeline } from "./resources";
 
@@ -139,11 +140,48 @@ test("every offered metric renders somewhere (no offered-but-invisible gaps)", (
       `pill-only metric ${id} must not be in the timeline registry`,
     );
   }
+  for (const id of PILL_RENDERED_METRICS) {
+    const def = METRIC_DEFINITIONS.find((d) => d.id === id);
+    assert.ok(def, `pill registry references unknown metric ${id}`);
+  }
+  for (const id of METRIC_IDS) {
+    assert.ok(
+      TIMELINE_RENDERED_METRICS.includes(id) || PILL_RENDERED_METRICS.includes(id),
+      `metric id ${id} renders nowhere`,
+    );
+  }
+  for (const id of METRIC_IDS) {
+    assert.ok(
+      id in DEFAULT_METRIC_SURFACES,
+      `metric id ${id} has no default surface selector`,
+    );
+  }
   assert.deepEqual(
     [...METRIC_IDS].sort(),
     METRIC_DEFINITIONS.map((d) => d.id).sort(),
     "every metric id needs a settings definition",
   );
+});
+
+test("collectTurnTelemetry passes model and provider through without fabrication", async () => {
+  const withBoth = await collectTurnTelemetry(
+    "turn-model-1",
+    "agent-test",
+    { kind: "completed" },
+    100,
+    { provider: "openai", model: "gpt-5", title: "T" },
+  );
+  assert.equal(withBoth.agentModel, "gpt-5");
+  assert.equal(withBoth.agentProvider, "openai");
+
+  const withNeither = await collectTurnTelemetry(
+    "turn-model-2",
+    "agent-test",
+    { kind: "completed" },
+    100,
+  );
+  assert.equal(withNeither.agentModel, null);
+  assert.equal(withNeither.agentProvider, null);
 });
 
 test("parseGitDiffShortstat parses insertions, deletions, and files", () => {
