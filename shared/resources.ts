@@ -376,8 +376,12 @@ export const TIMELINE_RENDERED_METRICS: readonly MetricId[] = [
   "load",
   "mcp",
   "agent_id",
+  "agent_title",
   "agent",
   "agent_provider",
+  "branch",
+  "worktree",
+  "uptime",
   "changes",
   "tokens",
 ];

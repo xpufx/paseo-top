@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { usePluginSettings } from "paseo-plugin-helper/client";
-import { formatBytes } from "paseo-plugin-helper/shared";
+import { formatBytes, formatUptime } from "paseo-plugin-helper/shared";
 import {
   isTimelineEnabled,
   topSettingsContract,
@@ -271,6 +271,69 @@ export function TopTimelineTelemetryCard({
               ]}
             >
               {data.agentProvider ?? "provider --"}
+            </Text>
+          </View>
+        )}
+
+        {show("agent_title") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Tag" size={12} color={theme.colors.foregroundMuted} />
+            <Text
+              style={[
+                styles.vitalText,
+                {
+                  color: data.agentTitle
+                    ? theme.colors.foreground
+                    : theme.colors.foregroundMuted,
+                },
+              ]}
+            >
+              {data.agentTitle ?? "title --"}
+            </Text>
+          </View>
+        )}
+
+        {show("branch") && (
+          <View style={styles.vitalChip}>
+            <Icon name="GitBranch" size={12} color={theme.colors.foregroundMuted} />
+            <Text
+              style={[
+                styles.vitalText,
+                {
+                  color: data.branch
+                    ? theme.colors.foreground
+                    : theme.colors.foregroundMuted,
+                },
+              ]}
+            >
+              {data.branch ?? "branch --"}
+            </Text>
+          </View>
+        )}
+
+        {show("worktree") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Folder" size={12} color={theme.colors.foregroundMuted} />
+            <Text
+              style={[
+                styles.vitalText,
+                {
+                  color: data.worktree
+                    ? theme.colors.foreground
+                    : theme.colors.foregroundMuted,
+                },
+              ]}
+            >
+              {data.worktree ?? "worktree --"}
+            </Text>
+          </View>
+        )}
+
+        {show("uptime") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Clock" size={12} color={theme.colors.foregroundMuted} />
+            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+              {data.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
             </Text>
           </View>
         )}
