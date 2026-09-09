@@ -461,7 +461,7 @@ function PillItemContent({
       return (
         <View style={styles.pillContainer}>
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
-            <Text style={{ color: colors.foregroundMuted }}>{"tools "}</Text>
+            <Text style={{ color: colors.foregroundMuted }}>{"calls "}</Text>
             <Text style={{ color: colors.foreground, fontWeight: "600" }}>
               {hasData
                 ? `${last.toolCalls}${last.toolErrors ? ` (${last.toolErrors} err)` : ""}`

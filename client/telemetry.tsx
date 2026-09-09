@@ -395,8 +395,8 @@ export function TopTimelineTelemetryCard({
               ]}
             >
               {data.toolCalls != null
-                ? `${data.toolCalls} tools${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
-                : "tools --"}
+                ? `${data.toolCalls} calls${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
+                : "calls --"}
             </Text>
           </View>
         )}
