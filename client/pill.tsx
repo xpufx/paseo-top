@@ -433,11 +433,17 @@ function PillItemContent({
     }
 
     case "tokens": {
+      const live = data?.liveUsage;
+      const liveTotal =
+        live && (live.inputTokens != null || live.outputTokens != null)
+          ? (live.inputTokens ?? 0) + (live.outputTokens ?? 0)
+          : null;
       const last = data?.lastTurn;
-      const total =
+      const lastTotal =
         last && (last.inputTokens != null || last.outputTokens != null)
           ? (last.inputTokens ?? 0) + (last.outputTokens ?? 0)
           : null;
+      const total = liveTotal ?? lastTotal;
       return (
         <View style={styles.pillContainer}>
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
@@ -701,6 +707,10 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
 
   useEffect(() => {
     const found: MetricId[] = [];
+    const live = data?.liveUsage;
+    if (live && (live.inputTokens != null || live.outputTokens != null)) {
+      found.push("tokens");
+    }
     const last = data?.lastTurn;
     if (last && (last.inputTokens != null || last.outputTokens != null)) {
       found.push("tokens");
@@ -717,7 +727,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.lastTurn, agent?.model, agent?.provider]);
+  }, [data?.lastTurn, data?.liveUsage, agent?.model, agent?.provider]);
 
   const worktreeLocationText = useMemo(
     () => formatWorktreeLocation(workspaceDirectory),

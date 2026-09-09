@@ -97,6 +97,16 @@ export const listCustomPillsRpc = defineContract({
   }),
 });
 
+export const liveUsageSchema = z.object({
+  inputTokens: z.number().optional(),
+  cachedInputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalCostUsd: z.number().optional(),
+  contextWindowMaxTokens: z.number().optional(),
+  contextWindowUsedTokens: z.number().optional(),
+});
+export type LiveUsage = z.infer<typeof liveUsageSchema>;
+
 export const topTimelineTelemetrySchema = z.object({
   turnId: z.string().nullable(),
   agentId: z.string(),
@@ -160,6 +170,7 @@ export const getSystemResourcesRpc = defineContract({
     mcpInstalled: z.boolean().optional(),
     customPills: z.array(CustomPillStateSchema).optional(),
     lastTurn: topTimelineTelemetrySchema.nullable().optional(),
+    liveUsage: liveUsageSchema.nullable().optional(),
   }),
 });
 
@@ -324,7 +335,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   {
     id: "tokens",
     title: "Token Usage",
-    description: "Per-turn input/output tokens and context window use",
+    description: "Live cumulative plus per-turn input/output tokens and context use",
     icon: "Coins",
   },
   {
@@ -364,8 +375,6 @@ export function isCoreTimelineMetric(metricId: MetricId): boolean {
 
 export const PROVIDER_DEPENDENT_METRICS: readonly MetricId[] = [
   "tokens",
-  "agent",
-  "agent_provider",
 ];
 
 export function isProviderDependent(metricId: MetricId): boolean {

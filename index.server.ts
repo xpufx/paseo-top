@@ -7,6 +7,7 @@ import {
   topSettingsContract,
   TOP_TIMELINE_KIND,
   TOP_TIMELINE_VERSION,
+  type LiveUsage,
 } from "./shared/resources";
 import {
   handleGetSystemResources,
@@ -19,6 +20,7 @@ import {
   customPillPoller,
   collectTurnTelemetry,
   collectGitDiffStat,
+  setLastLiveUsage,
   log,
 } from "./server/resources";
 
@@ -69,6 +71,7 @@ export default function contribute(server: PluginServerContext) {
         agentModel = refetched?.agent?.model ?? agentModel;
         agentProvider = refetched?.agent?.provider ?? agentProvider;
         agentTitle = refetched?.agent?.title ?? agentTitle;
+        setLastLiveUsage((refetched?.agent?.lastUsage as LiveUsage | null | undefined) ?? null);
       } catch {
         // Model, provider, and title stay at event snapshot values; the card renders placeholders
       }

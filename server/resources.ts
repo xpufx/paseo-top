@@ -21,6 +21,7 @@ import {
   type CustomPillState,
   type CustomPillDefinition,
   type TopTimelineTelemetryData,
+  type LiveUsage,
 } from "../shared/resources";
 import { PLUGIN_VERSION } from "../shared/version";
 
@@ -379,6 +380,7 @@ export async function handleGetSystemResources(input?: {
       .getAllStates()
       .filter((state) => effectiveEnabled.has(state.id)),
     lastTurn: lastTurnTelemetry,
+    liveUsage: lastLiveUsage,
   };
 }
 
@@ -475,8 +477,20 @@ export function summarizeTurnTimeline(timeline: readonly unknown[]): TurnActivit
 
 let lastTurnTelemetry: TopTimelineTelemetryData | null = null;
 
+let lastLiveUsage: LiveUsage | null = null;
+
 export function getLastTurnTelemetry(): TopTimelineTelemetryData | null {
   return lastTurnTelemetry;
+}
+
+export function setLastLiveUsage(usage: LiveUsage | null): void {
+  if (usage) {
+    lastLiveUsage = usage;
+  }
+}
+
+export function getLastLiveUsage(): LiveUsage | null {
+  return lastLiveUsage;
 }
 
 export async function collectTurnTelemetry(
