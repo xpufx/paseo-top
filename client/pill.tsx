@@ -49,12 +49,20 @@ import {
   getCustomPillsRpc,
   listCustomPillsRpc,
   runCustomPillModalCommandRpc,
+  isPillEnabled,
+  legacyFlagView,
+  METRIC_DEFINITIONS,
+  DEFAULT_METRIC_SURFACES,
+  checkboxesFromTarget,
+  targetFromCheckboxes,
   type SystemResources,
   type ResourceField,
   type TopSettings,
   type PillMode,
   type CustomPillDefinition,
   type CustomPillStateOutput,
+  type MetricId,
+  type SurfaceTarget,
 } from "../shared/resources";
 import { PLUGIN_VERSION } from "../shared/version";
 
@@ -164,7 +172,9 @@ export type PillItemType =
   | "agent_id"
   | "load"
   | "uptime"
-  | "mcp";
+  | "mcp"
+  | "changes"
+  | "tokens";
 
 export type ModalTab = "system" | "context" | "settings" | "about";
 
@@ -174,6 +184,8 @@ export function getItemTab(item: PillItemType): "system" | "context" {
     case "load":
     case "uptime":
     case "mcp":
+    case "changes":
+    case "tokens":
       return "system";
     case "branch":
     case "worktree":
@@ -400,6 +412,41 @@ function PillItemContent({
       );
     }
 
+    case "changes": {
+      const last = data?.lastTurn;
+      const hasData = last && (last.gitInsertions != null || last.gitDeletions != null);
+      return (
+        <View style={styles.pillContainer}>
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: colors.foregroundMuted }}>{"Δ "}</Text>
+            <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+              {hasData
+                ? `+${last.gitInsertions ?? 0}/-${last.gitDeletions ?? 0}`
+                : "--"}
+            </Text>
+          </Text>
+        </View>
+      );
+    }
+
+    case "tokens": {
+      const last = data?.lastTurn;
+      const total =
+        last && (last.inputTokens != null || last.outputTokens != null)
+          ? (last.inputTokens ?? 0) + (last.outputTokens ?? 0)
+          : null;
+      return (
+        <View style={styles.pillContainer}>
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: colors.foregroundMuted }}>{"tok "}</Text>
+            <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+              {total ?? "--"}
+            </Text>
+          </Text>
+        </View>
+      );
+    }
+
     case "cpu_ram":
     default: {
       const ramGb =
@@ -554,6 +601,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
   const { settings } = usePluginSettings(topSettingsContract, {
     refetchInterval: 5000,
   });
+  const flags = legacyFlagView(settings);
 
   useEffect(() => {
     notifySettingsChanged(settings);
@@ -569,45 +617,45 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
   }));
 
   const hasAnyEnabled =
-    settings.showCpuRam ||
-    settings.showBranch ||
-    settings.showWorktree ||
-    settings.showAgentTitle ||
-    settings.showAgent ||
-    settings.showAgentProvider ||
-    settings.showAgentActivity ||
-    settings.showAgentId ||
-    settings.showLoad ||
-    settings.showUptime ||
-    (settings.showMcp ?? settings.mcp ?? true);
+    flags.showCpuRam ||
+    flags.showBranch ||
+    flags.showWorktree ||
+    flags.showAgentTitle ||
+    flags.showAgent ||
+    flags.showAgentProvider ||
+    flags.showAgentActivity ||
+    flags.showAgentId ||
+    flags.showLoad ||
+    flags.showUptime ||
+    (flags.showMcp);
 
   // If no items are selected, fallback to CPU & RAM without mutating saved settings
-  const effectiveShowCpuRam = settings.showCpuRam || !hasAnyEnabled;
+  const effectiveShowCpuRam = flags.showCpuRam || !hasAnyEnabled;
 
   const neededFields = useMemo(() => {
     const fields: ResourceField[] = [];
     if (effectiveShowCpuRam) {
       fields.push("cpu", "memory");
     }
-    if (settings.showBranch && workspaceDirectory) {
+    if (flags.showBranch && workspaceDirectory) {
       fields.push("branch");
     }
-    if (settings.showLoad) {
+    if (flags.showLoad) {
       fields.push("load");
     }
-    if (settings.showUptime) {
+    if (flags.showUptime) {
       fields.push("uptime");
     }
-    if (settings.showMcp ?? settings.mcp ?? true) {
+    if (flags.showMcp) {
       fields.push("mcp");
     }
     return fields;
   }, [
     effectiveShowCpuRam,
-    settings.showBranch,
-    settings.showLoad,
-    settings.showUptime,
-    settings.showMcp,
+    flags.showBranch,
+    flags.showLoad,
+    flags.showUptime,
+    flags.showMcp,
     settings.mcp,
     workspaceDirectory,
   ]);
@@ -630,7 +678,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
     },
   );
 
-  const isMcpEnabled = (settings.showMcp ?? settings.mcp ?? true) && Boolean(data?.mcpInstalled);
+  const isMcpEnabled = (flags.showMcp) && Boolean(data?.mcpInstalled);
 
   const worktreeLocationText = useMemo(
     () => formatWorktreeLocation(workspaceDirectory),
@@ -640,16 +688,22 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
   // Collect available items enabled by user settings (or fallback to cpu_ram)
   const items: PillItemType[] = [];
   if (effectiveShowCpuRam) items.push("cpu_ram");
-  if (settings.showBranch) items.push("branch");
-  if (settings.showWorktree && workspaceDirectory) items.push("worktree");
-  if (settings.showAgentTitle && agent?.title) items.push("agent_title");
-  if (settings.showAgent && (agent?.model || agent?.provider)) items.push("agent");
-  if (settings.showAgentProvider && agent?.provider) items.push("agent_provider");
-  if (settings.showAgentActivity && (agent?.lastActivityAt || agent?.status)) items.push("agent_activity");
-  if (settings.showAgentId && agentId) items.push("agent_id");
-  if (settings.showLoad) items.push("load");
-  if (settings.showUptime) items.push("uptime");
+  if (flags.showBranch) items.push("branch");
+  if (flags.showWorktree && workspaceDirectory) items.push("worktree");
+  if (flags.showAgentTitle && agent?.title) items.push("agent_title");
+  if (flags.showAgent && (agent?.model || agent?.provider)) items.push("agent");
+  if (flags.showAgentProvider && agent?.provider) items.push("agent_provider");
+  if (flags.showAgentActivity && (agent?.lastActivityAt || agent?.status)) items.push("agent_activity");
+  if (flags.showAgentId && agentId) items.push("agent_id");
+  if (flags.showLoad) items.push("load");
+  if (flags.showUptime) items.push("uptime");
   if (isMcpEnabled) items.push("mcp");
+  if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.changes)) {
+    items.push("changes");
+  }
+  if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.tokens)) {
+    items.push("tokens");
+  }
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -764,6 +818,74 @@ interface ResourceModalProps extends RenderModalProps<ModalTab> {
   initialTab?: ModalTab;
 }
 
+function MetricSurfaceMatrix({
+  settings,
+  updateSettings,
+  notifySettingsChanged,
+  mcpInstalled,
+}: {
+  settings: TopSettings;
+  updateSettings: (updates: Partial<TopSettings>) => void;
+  notifySettingsChanged: (s: TopSettings) => void;
+  mcpInstalled: boolean;
+}) {
+  const { colors } = usePluginTheme();
+  const surfaces = settings.metricSurfaces ?? DEFAULT_METRIC_SURFACES;
+  const setTarget = (id: MetricId, target: SurfaceTarget) => {
+    const next = { ...surfaces, [id]: target };
+    const s = { ...settings, metricSurfaces: next };
+    updateSettings({ metricSurfaces: next });
+    notifySettingsChanged(s);
+  };
+  return (
+    <View style={{ gap: 12 }}>
+      {METRIC_DEFINITIONS.map((def) => {
+        const boxes = checkboxesFromTarget(surfaces[def.id]);
+        const disabled = def.id === "mcp" && !mcpInstalled;
+        const setBox = (which: "pill" | "timeline", val: boolean) => {
+          const nextBoxes = { ...boxes, [which]: val };
+          setTarget(
+            def.id,
+            targetFromCheckboxes(nextBoxes.pill, nextBoxes.timeline),
+          );
+        };
+        return (
+          <View key={def.id}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: "600", color: colors.foreground }}>
+                {def.title}
+              </Text>
+            </View>
+            <Text
+              style={{ fontSize: 11, color: colors.foregroundMuted, marginBottom: 6 }}
+            >
+              {def.id === "mcp" && !mcpInstalled
+                ? "Requires paseo-mcp-tools plugin (not installed)"
+                : def.description}
+            </Text>
+            <View style={{ flexDirection: "row", gap: 16 }}>
+              <Toggle
+                label="Pill"
+                value={boxes.pill}
+                disabled={disabled}
+                onValueChange={(val) => setBox("pill", val)}
+              />
+              <Toggle
+                label="Timeline"
+                value={boxes.timeline}
+                disabled={disabled}
+                onValueChange={(val) => setBox("timeline", val)}
+              />
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: ResourceModalProps) {
   const { colors } = usePluginTheme();
   const { settings, updateSettings, resetSettings, refetch: refetchSettings } = usePluginSettings(
@@ -775,6 +897,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
   const { data: customPillList } = useRpcQuery(listCustomPillsRpc, EMPTY_PARAMS, {
     refetchInterval: 5000,
   });
+  const flags = legacyFlagView(settings);
   const [selectedTab, setSelectedTab] = useState<ModalTab | null>(null);
   const activeTab = selectedTab ?? payload ?? initialTab ?? settings.defaultTab ?? "system";
 
@@ -824,19 +947,19 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
     },
   );
 
-  const isMcpEnabled = (settings.showMcp ?? settings.mcp ?? true) && Boolean(data?.mcpInstalled);
+  const isMcpEnabled = (flags.showMcp) && Boolean(data?.mcpInstalled);
 
   const hasAnyPillEnabled =
-    settings.showCpuRam ||
-    settings.showBranch ||
-    settings.showWorktree ||
-    settings.showAgentTitle ||
-    settings.showAgent ||
-    settings.showAgentProvider ||
-    settings.showAgentActivity ||
-    settings.showAgentId ||
-    settings.showLoad ||
-    settings.showUptime ||
+    flags.showCpuRam ||
+    flags.showBranch ||
+    flags.showWorktree ||
+    flags.showAgentTitle ||
+    flags.showAgent ||
+    flags.showAgentProvider ||
+    flags.showAgentActivity ||
+    flags.showAgentId ||
+    flags.showLoad ||
+    flags.showUptime ||
     isMcpEnabled;
 
   const handleRefresh = () => {
@@ -1235,130 +1358,11 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               }
             />
             <View style={styles.settingsToggles}>
-              <Toggle
-                label="CPU & RAM Usage"
-                description="Live CPU load % and RAM used (e.g. 14% · 3.2G)"
-                value={settings.showCpuRam}
-                onValueChange={(val) => {
-                  const s = { ...settings, showCpuRam: val };
-                  updateSettings({ showCpuRam: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="Git Branch"
-                description="Active git branch name (e.g. main, feat/auth)"
-                value={settings.showBranch}
-                onValueChange={(val) => {
-                  const s = { ...settings, showBranch: val };
-                  updateSettings({ showBranch: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="Worktree Location"
-                description="Active workspace or worktree folder path"
-                value={settings.showWorktree}
-                onValueChange={(val) => {
-                  const s = { ...settings, showWorktree: val };
-                  updateSettings({ showWorktree: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="Agent Tab Title"
-                description="Active agent session title (e.g. Research architecture)"
-                value={settings.showAgentTitle}
-                onValueChange={(val) => {
-                  const s = { ...settings, showAgentTitle: val };
-                  updateSettings({ showAgentTitle: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="Agent Model"
-                description="Active LLM model name (e.g. claude-3-7-sonnet)"
-                value={settings.showAgent}
-                onValueChange={(val) => {
-                  const s = { ...settings, showAgent: val };
-                  updateSettings({ showAgent: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="Agent Provider"
-                description="LLM provider name (e.g. anthropic, openai)"
-                value={settings.showAgentProvider}
-                onValueChange={(val) => {
-                  const s = { ...settings, showAgentProvider: val };
-                  updateSettings({ showAgentProvider: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="Agent Activity / Idle"
-                description="Current status or inactivity duration (e.g. active, idle 4m)"
-                value={settings.showAgentActivity}
-                onValueChange={(val) => {
-                  const s = { ...settings, showAgentActivity: val };
-                  updateSettings({ showAgentActivity: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="Agent ID"
-                description="Agent session short ID (tap the pill for the full copyable ID)"
-                value={settings.showAgentId ?? true}
-                onValueChange={(val) => {
-                  const s = { ...settings, showAgentId: val };
-                  updateSettings({ showAgentId: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="System Load"
-                description="1-minute host load average (e.g. load 0.42)"
-                value={settings.showLoad}
-                onValueChange={(val) => {
-                  const s = { ...settings, showLoad: val };
-                  updateSettings({ showLoad: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="Host Uptime"
-                description="System uptime duration (e.g. up 3d 4h)"
-                value={settings.showUptime}
-                onValueChange={(val) => {
-                  const s = { ...settings, showUptime: val };
-                  updateSettings({ showUptime: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="MCP Server Health (via mcp-tools)"
-                description={
-                  Boolean(data?.mcpInstalled)
-                    ? "Live MCP server health snapshots from paseo-mcp-tools plugin"
-                    : "Requires paseo-mcp-tools plugin (not installed)"
-                }
-                value={settings.showMcp ?? settings.mcp ?? true}
-                disabled={!data?.mcpInstalled}
-                onValueChange={(val) => {
-                  const s = { ...settings, showMcp: val, mcp: val };
-                  updateSettings({ showMcp: val, mcp: val });
-                  notifySettingsChanged(s);
-                }}
-              />
-              <Toggle
-                label="Timeline Turn Telemetry"
-                description="Append a system resource telemetry card to the timeline when an agent turn ends"
-                value={settings.recordTurnTelemetry ?? true}
-                onValueChange={(val) => {
-                  const s = { ...settings, recordTurnTelemetry: val };
-                  updateSettings({ recordTurnTelemetry: val });
-                  notifySettingsChanged(s);
-                }}
+              <MetricSurfaceMatrix
+                settings={settings}
+                updateSettings={updateSettings}
+                notifySettingsChanged={notifySettingsChanged}
+                mcpInstalled={Boolean(data?.mcpInstalled)}
               />
             </View>
           </Card>
@@ -1637,6 +1641,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
 
   function syncPills(settings: TopSettings) {
     latestSettings = settings;
+    const flags = legacyFlagView(settings);
     const mode = settings.pillMode ?? "cycle";
 
     if (mode === "cycle" || mode === "all") {
@@ -1674,18 +1679,18 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
       }
 
       const hasAny =
-        settings.showCpuRam ||
-        settings.showBranch ||
-        settings.showWorktree ||
-        settings.showAgentTitle ||
-        settings.showAgent ||
-        settings.showAgentProvider ||
-        settings.showAgentActivity ||
-        settings.showAgentId ||
-        settings.showLoad ||
-        settings.showUptime;
+        flags.showCpuRam ||
+        flags.showBranch ||
+        flags.showWorktree ||
+        flags.showAgentTitle ||
+        flags.showAgent ||
+        flags.showAgentProvider ||
+        flags.showAgentActivity ||
+        flags.showAgentId ||
+        flags.showLoad ||
+        flags.showUptime;
 
-      const effectiveCpu = settings.showCpuRam || !hasAny;
+      const effectiveCpu = flags.showCpuRam || !hasAny;
 
       const desiredPills: {
         id: string;
@@ -1704,7 +1709,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "system",
         });
       }
-      if (settings.showBranch) {
+      if (flags.showBranch) {
         desiredPills.push({
           id: "paseo-top-branch",
           item: "branch",
@@ -1713,7 +1718,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "context",
         });
       }
-      if (settings.showWorktree) {
+      if (flags.showWorktree) {
         desiredPills.push({
           id: "paseo-top-worktree",
           item: "worktree",
@@ -1722,7 +1727,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "context",
         });
       }
-      if (settings.showAgentTitle) {
+      if (flags.showAgentTitle) {
         desiredPills.push({
           id: "paseo-top-agent-title",
           item: "agent_title",
@@ -1731,7 +1736,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "context",
         });
       }
-      if (settings.showAgent) {
+      if (flags.showAgent) {
         desiredPills.push({
           id: "paseo-top-agent",
           item: "agent",
@@ -1740,7 +1745,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "context",
         });
       }
-      if (settings.showAgentProvider) {
+      if (flags.showAgentProvider) {
         desiredPills.push({
           id: "paseo-top-agent-provider",
           item: "agent_provider",
@@ -1749,7 +1754,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "context",
         });
       }
-      if (settings.showAgentActivity) {
+      if (flags.showAgentActivity) {
         desiredPills.push({
           id: "paseo-top-agent-activity",
           item: "agent_activity",
@@ -1758,7 +1763,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "context",
         });
       }
-      if (settings.showAgentId ?? true) {
+      if (flags.showAgentId ?? true) {
         desiredPills.push({
           id: "paseo-top-agent-id",
           item: "agent_id",
@@ -1767,7 +1772,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "context",
         });
       }
-      if (settings.showLoad) {
+      if (flags.showLoad) {
         desiredPills.push({
           id: "paseo-top-load",
           item: "load",
@@ -1776,7 +1781,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "system",
         });
       }
-      if (settings.showUptime) {
+      if (flags.showUptime) {
         desiredPills.push({
           id: "paseo-top-uptime",
           item: "uptime",
@@ -1785,7 +1790,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           defaultTab: "system",
         });
       }
-      if (settings.showMcp ?? settings.mcp ?? true) {
+      if (flags.showMcp) {
         desiredPills.push({
           id: "paseo-top-mcp",
           item: "mcp",

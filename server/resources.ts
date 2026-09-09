@@ -378,7 +378,105 @@ export async function handleGetSystemResources(input?: {
     customPills: customPillPoller
       .getAllStates()
       .filter((state) => effectiveEnabled.has(state.id)),
+    lastTurn: lastTurnTelemetry,
   };
+}
+
+export interface GitDiffStat {
+  insertions: number;
+  deletions: number;
+  filesChanged: number;
+}
+
+export function parseGitDiffShortstat(output: string): GitDiffStat | null {
+  const match = output.match(/(\d+)\s+files? changed(?:,\s+(\d+)\s+insertions?\(\+\))?(?:,\s+(\d+)\s+deletions?\(-\))?/);
+  if (!match) return null;
+  return {
+    filesChanged: parseInt(match[1], 10),
+    insertions: match[2] ? parseInt(match[2], 10) : 0,
+    deletions: match[3] ? parseInt(match[3], 10) : 0,
+  };
+}
+
+export function collectGitDiffStat(cwd: string): GitDiffStat | null {
+  try {
+    const output = child_process.execSync("git diff --shortstat", {
+      cwd,
+      timeout: 2000,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const trimmed = output.trim();
+    if (!trimmed) return { insertions: 0, deletions: 0, filesChanged: 0 };
+    return parseGitDiffShortstat(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+export interface TurnUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  contextUsedTokens?: number;
+  contextMaxTokens?: number;
+  costUsd?: number;
+}
+
+export interface TurnActivity {
+  toolCalls: number;
+  toolErrors: number;
+  usage?: TurnUsage;
+}
+
+function readUsageRecord(record: unknown): TurnUsage | undefined {
+  if (!record || typeof record !== "object") return undefined;
+  const r = record as Record<string, unknown>;
+  const num = (v: unknown): number | undefined =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  const usage: TurnUsage = {
+    inputTokens: num(r.inputTokens),
+    outputTokens: num(r.outputTokens),
+    contextUsedTokens: num(r.contextUsedTokens),
+    contextMaxTokens: num(r.contextWindowMaxTokens ?? r.contextMaxTokens),
+    costUsd: num(r.totalCostUsd ?? r.costUsd),
+  };
+  if (
+    usage.inputTokens === undefined &&
+    usage.outputTokens === undefined &&
+    usage.contextUsedTokens === undefined &&
+    usage.costUsd === undefined
+  ) {
+    return undefined;
+  }
+  return usage;
+}
+
+export function summarizeTurnTimeline(timeline: readonly unknown[]): TurnActivity {
+  let toolCalls = 0;
+  let toolErrors = 0;
+  let usage: TurnUsage | undefined;
+  for (const item of timeline) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const type = row.type;
+    if (type === "tool_call") {
+      toolCalls++;
+      const detail = row.detail as Record<string, unknown> | undefined;
+      const status = row.status ?? detail?.status;
+      if (status === "failed" || status === "error") toolErrors++;
+    }
+    if (type === "usage_updated" || type === "turn_completed") {
+      const found = readUsageRecord(row.usage ?? row.detail);
+      if (found) usage = { ...usage, ...found };
+    }
+  }
+  return { toolCalls, toolErrors, usage };
+}
+
+let lastTurnTelemetry: TopTimelineTelemetryData | null = null;
+
+export function getLastTurnTelemetry(): TopTimelineTelemetryData | null {
+  return lastTurnTelemetry;
 }
 
 export async function collectTurnTelemetry(
@@ -390,6 +488,13 @@ export async function collectTurnTelemetry(
     reason?: string;
   },
   durationMs?: number,
+  extra?: {
+    cwd?: string | null;
+    provider?: string | null;
+    title?: string | null;
+    timeline?: readonly unknown[];
+    gitBefore?: GitDiffStat | null;
+  },
 ): Promise<TopTimelineTelemetryData> {
   const metrics = getSystemMetrics();
   let totalMem = metrics.memory.totalBytes;
@@ -434,7 +539,42 @@ export async function collectTurnTelemetry(
     outcomeError = outcome.reason;
   }
 
-  return {
+  const cwd = extra?.cwd ?? null;
+  const branch = resolveGitBranch(cwd);
+  const uptimeSeconds = Math.floor(os.uptime());
+
+  let gitInsertions: number | undefined;
+  let gitDeletions: number | undefined;
+  let gitFilesChanged: number | undefined;
+  if (cwd) {
+    const before = extra?.gitBefore ?? null;
+    const after = collectGitDiffStat(cwd);
+    if (after) {
+      gitInsertions = Math.max(0, after.insertions - (before?.insertions ?? 0));
+      gitDeletions = Math.max(0, after.deletions - (before?.deletions ?? 0));
+      gitFilesChanged = after.filesChanged;
+    }
+  }
+
+  let toolCalls: number | undefined;
+  let toolErrors: number | undefined;
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+  let contextUsedTokens: number | undefined;
+  let contextMaxTokens: number | undefined;
+  let costUsd: number | undefined;
+  if (extra?.timeline) {
+    const activity = summarizeTurnTimeline(extra.timeline);
+    toolCalls = activity.toolCalls;
+    toolErrors = activity.toolErrors;
+    inputTokens = activity.usage?.inputTokens;
+    outputTokens = activity.usage?.outputTokens;
+    contextUsedTokens = activity.usage?.contextUsedTokens;
+    contextMaxTokens = activity.usage?.contextMaxTokens;
+    costUsd = activity.usage?.costUsd;
+  }
+
+  const data: TopTimelineTelemetryData = {
     turnId,
     agentId,
     outcomeKind: outcome.kind,
@@ -448,5 +588,23 @@ export async function collectTurnTelemetry(
     loadAvg1m,
     mcpHealthy,
     mcpTotal,
+    branch,
+    worktree: cwd,
+    agentTitle: extra?.title ?? null,
+    agentModel: null,
+    agentProvider: extra?.provider ?? null,
+    uptimeSeconds,
+    gitInsertions,
+    gitDeletions,
+    gitFilesChanged,
+    toolCalls,
+    toolErrors,
+    inputTokens,
+    outputTokens,
+    contextUsedTokens,
+    contextMaxTokens,
+    costUsd,
   };
+  lastTurnTelemetry = data;
+  return data;
 }

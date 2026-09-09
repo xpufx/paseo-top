@@ -18,6 +18,7 @@ import {
   handleResetSettings,
   customPillPoller,
   collectTurnTelemetry,
+  collectGitDiffStat,
   log,
 } from "./server/resources";
 
@@ -33,9 +34,16 @@ export default function contribute(server: PluginServerContext) {
   server.handle(runCustomPillModalCommandRpc, handleRunCustomPillModalCommand);
 
   const turnStartTimes = new Map<string, number>();
+  const turnGitBefore = new Map<string, { insertions: number; deletions: number; filesChanged: number }>();
 
   const unsubscribeTurnStarted = server.on("agent.turn_started", (event) => {
     turnStartTimes.set(event.agent.id, Date.now());
+    const before = collectGitDiffStat(event.agent.cwd);
+    if (before) {
+      turnGitBefore.set(event.agent.id, before);
+    } else {
+      turnGitBefore.delete(event.agent.id);
+    }
   });
 
   const unsubscribeTurnEnded = server.on("agent.turn_ended", async (event, context) => {
@@ -43,11 +51,14 @@ export default function contribute(server: PluginServerContext) {
       const settings = await handleGetSettings();
       if (settings.recordTurnTelemetry === false) {
         turnStartTimes.delete(event.agent.id);
+        turnGitBefore.delete(event.agent.id);
         return;
       }
 
       const startTime = turnStartTimes.get(event.agent.id);
       turnStartTimes.delete(event.agent.id);
+      const gitBefore = turnGitBefore.get(event.agent.id);
+      turnGitBefore.delete(event.agent.id);
       const durationMs = startTime ? Date.now() - startTime : undefined;
 
       const telemetry = await collectTurnTelemetry(
@@ -55,6 +66,13 @@ export default function contribute(server: PluginServerContext) {
         event.agent.id,
         event.outcome,
         durationMs,
+        {
+          cwd: event.agent.cwd,
+          provider: event.agent.provider,
+          title: event.agent.title,
+          timeline: event.timeline,
+          gitBefore: gitBefore ?? null,
+        },
       );
 
       await context.paseo.agents.ref(event.agent.id).timeline.append({

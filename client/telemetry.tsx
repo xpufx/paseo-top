@@ -2,8 +2,13 @@ import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
+import { usePluginSettings } from "paseo-plugin-helper/client";
 import { formatBytes } from "paseo-plugin-helper/shared";
-import type { TopTimelineTelemetryData } from "../shared/resources";
+import {
+  isTimelineEnabled,
+  topSettingsContract,
+  type TopTimelineTelemetryData,
+} from "../shared/resources";
 
 export function TopTimelineTelemetryCard({
   item,
@@ -12,6 +17,10 @@ export function TopTimelineTelemetryCard({
   timestamp,
 }: PluginTimelineItemProps<TopTimelineTelemetryData>) {
   const data = item.data;
+  const { settings } = usePluginSettings(topSettingsContract);
+  const surfaces = settings.metricSurfaces;
+  const show = (id: "cpu_ram" | "load" | "mcp" | "changes" | "tokens") =>
+    !surfaces || isTimelineEnabled(surfaces[id]);
 
   const styles = useMemo(() => {
     const isFailed = data.outcomeKind === "failed";
@@ -54,6 +63,16 @@ export function TopTimelineTelemetryCard({
       timeText: {
         fontSize: 10,
         color: theme.colors.foregroundMuted,
+      },
+      footerRow: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        marginTop: 6,
+      },
+      footerText: {
+        fontSize: 9,
+        color: theme.colors.foregroundMuted,
+        opacity: 0.7,
       },
       vitalsRow: {
         flexDirection: "row",
@@ -157,28 +176,34 @@ export function TopTimelineTelemetryCard({
       </View>
 
       <View style={styles.vitalsRow}>
-        <View style={styles.vitalChip}>
-          <Icon name="Cpu" size={12} color={theme.colors.foregroundMuted} />
-          <Text style={[styles.vitalText, { color: cpuColor }]}>
-            CPU {data.cpuPercent}%
-          </Text>
-        </View>
+        {show("cpu_ram") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Cpu" size={12} color={theme.colors.foregroundMuted} />
+            <Text style={[styles.vitalText, { color: cpuColor }]}>
+              CPU {data.cpuPercent}%
+            </Text>
+          </View>
+        )}
 
-        <View style={styles.vitalChip}>
-          <Icon name="Database" size={12} color={theme.colors.foregroundMuted} />
-          <Text style={[styles.vitalText, { color: memColor }]}>
-            RAM {formatBytes(data.memUsedBytes)} ({data.memPercent}%)
-          </Text>
-        </View>
+        {show("cpu_ram") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Database" size={12} color={theme.colors.foregroundMuted} />
+            <Text style={[styles.vitalText, { color: memColor }]}>
+              RAM {formatBytes(data.memUsedBytes)} ({data.memPercent}%)
+            </Text>
+          </View>
+        )}
 
-        <View style={styles.vitalChip}>
-          <Icon name="Activity" size={12} color={theme.colors.foregroundMuted} />
-          <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
-            Load {data.loadAvg1m.toFixed(2)}
-          </Text>
-        </View>
+        {show("load") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Activity" size={12} color={theme.colors.foregroundMuted} />
+            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+              Load {data.loadAvg1m.toFixed(2)}
+            </Text>
+          </View>
+        )}
 
-        {data.mcpTotal != null && (
+        {show("mcp") && data.mcpTotal != null && (
           <View style={styles.vitalChip}>
             <Icon name="Server" size={12} color={theme.colors.foregroundMuted} />
             <Text
@@ -196,6 +221,47 @@ export function TopTimelineTelemetryCard({
             </Text>
           </View>
         )}
+
+        {show("changes") &&
+          (data.gitInsertions != null || data.gitDeletions != null) && (
+            <View style={styles.vitalChip}>
+              <Icon
+                name="GitCommitHorizontal"
+                size={12}
+                color={theme.colors.foregroundMuted}
+              />
+              <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+                {(data.gitFilesChanged ?? 0) > 0
+                  ? `±${data.gitFilesChanged} files +${data.gitInsertions ?? 0}/-${data.gitDeletions ?? 0}`
+                  : "No changes"}
+              </Text>
+            </View>
+          )}
+
+        {show("tokens") &&
+          (data.inputTokens != null || data.outputTokens != null) && (
+            <View style={styles.vitalChip}>
+              <Icon name="Coins" size={12} color={theme.colors.foregroundMuted} />
+              <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+                {(data.inputTokens ?? 0) + (data.outputTokens ?? 0)} tok
+                {data.contextMaxTokens
+                  ? ` (${Math.round(
+                      ((data.contextUsedTokens ?? 0) / data.contextMaxTokens) * 100,
+                    )}% ctx)`
+                  : ""}
+              </Text>
+            </View>
+          )}
+
+        {data.toolCalls != null && data.toolCalls > 0 && (
+          <View style={styles.vitalChip}>
+            <Icon name="Wrench" size={12} color={theme.colors.foregroundMuted} />
+            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+              {data.toolCalls} tools
+              {data.toolErrors ? ` (${data.toolErrors} err)` : ""}
+            </Text>
+          </View>
+        )}
       </View>
 
       {data.outcomeError && (
@@ -205,6 +271,10 @@ export function TopTimelineTelemetryCard({
           </Text>
         </View>
       )}
+
+      <View style={styles.footerRow}>
+        <Text style={styles.footerText}>via top</Text>
+      </View>
     </View>
   );
 }

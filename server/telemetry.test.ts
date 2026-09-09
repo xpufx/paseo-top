@@ -1,12 +1,16 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execSync } from "node:child_process";
 import {
   topTimelineTelemetrySchema,
   TopSettingsSchema,
   TOP_TIMELINE_KIND,
   TOP_TIMELINE_VERSION,
 } from "../shared/resources";
-import { collectTurnTelemetry, customPillPoller } from "./resources";
+import { collectTurnTelemetry, customPillPoller, parseGitDiffShortstat, summarizeTurnTimeline } from "./resources";
 
 after(() => {
   customPillPoller.stop();
@@ -72,12 +76,19 @@ test("topTimelineTelemetrySchema rejects invalid outcome kind", () => {
   });
 });
 
-test("TopSettingsSchema includes recordTurnTelemetry defaulting to true", () => {
+test("TopSettingsSchema migrates to per-metric surfaces with sane defaults", () => {
   const defaults = TopSettingsSchema.parse({});
-  assert.equal(defaults.recordTurnTelemetry, true);
+  assert.equal(defaults.metricSurfaces.cpu_ram, "both");
+  assert.equal(defaults.metricSurfaces.changes, "timeline");
+  assert.equal(defaults.metricSurfaces.tokens, "timeline");
 
-  const disabled = TopSettingsSchema.parse({ recordTurnTelemetry: false });
-  assert.equal(disabled.recordTurnTelemetry, false);
+  const legacy = TopSettingsSchema.parse({ showCpuRam: false, recordTurnTelemetry: false });
+  assert.equal(legacy.metricSurfaces.cpu_ram, "none");
+  assert.equal(legacy.metricSurfaces.load, "none");
+
+  const legacyOn = TopSettingsSchema.parse({ showCpuRam: true, recordTurnTelemetry: true });
+  assert.equal(legacyOn.metricSurfaces.cpu_ram, "both");
+  assert.equal(legacyOn.metricSurfaces.load, "timeline");
 });
 
 test("collectTurnTelemetry returns valid telemetry data matching schema", async () => {
@@ -101,4 +112,59 @@ test("collectTurnTelemetry returns valid telemetry data matching schema", async 
 test("timeline constants are correctly defined", () => {
   assert.equal(TOP_TIMELINE_KIND, "top-turn-telemetry");
   assert.equal(TOP_TIMELINE_VERSION, 1);
+});
+
+test("parseGitDiffShortstat parses insertions, deletions, and files", () => {
+  assert.deepEqual(parseGitDiffShortstat("3 files changed, 40 insertions(+), 12 deletions(-)"), {
+    filesChanged: 3,
+    insertions: 40,
+    deletions: 12,
+  });
+  assert.deepEqual(parseGitDiffShortstat("1 file changed, 5 insertions(+)"), {
+    filesChanged: 1,
+    insertions: 5,
+    deletions: 0,
+  });
+  assert.equal(parseGitDiffShortstat("nothing to commit"), null);
+});
+
+test("summarizeTurnTimeline counts tools and extracts usage", () => {
+  const activity = summarizeTurnTimeline([
+    { type: "tool_call", name: "bash", status: "success" },
+    { type: "tool_call", name: "read", status: "failed" },
+    { type: "assistant_message", text: "hi" },
+    { type: "usage_updated", usage: { inputTokens: 100, outputTokens: 50 } },
+  ]);
+  assert.equal(activity.toolCalls, 2);
+  assert.equal(activity.toolErrors, 1);
+  assert.equal(activity.usage?.inputTokens, 100);
+  assert.equal(activity.usage?.outputTokens, 50);
+});
+
+test("collectTurnTelemetry includes git delta and usage when provided", async () => {
+  const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "top-git-test-"));
+  execSync("git init -q && git config user.email t@t.t && git config user.name t", { cwd: tmpRepo });
+  fs.writeFileSync(path.join(tmpRepo, "a.txt"), "one\ntwo\nthree\n");
+  execSync("git add -A && git commit -qm init", { cwd: tmpRepo });
+  fs.appendFileSync(path.join(tmpRepo, "a.txt"), "four\nfive\n");
+  const telemetry = await collectTurnTelemetry(
+    "turn-dense-1",
+    "agent-test",
+    { kind: "completed" },
+    500,
+    {
+      cwd: tmpRepo,
+      provider: "test-provider",
+      title: "Test",
+      timeline: [{ type: "tool_call", name: "x", status: "success" }],
+      gitBefore: { insertions: 0, deletions: 0, filesChanged: 0 },
+    },
+  );
+  fs.rmSync(tmpRepo, { recursive: true, force: true });
+  const validated = topTimelineTelemetrySchema.parse(telemetry);
+  assert.equal(validated.toolCalls, 1);
+  assert.equal(validated.agentProvider, "test-provider");
+  assert.equal(validated.gitInsertions, 2);
+  assert.equal(validated.gitFilesChanged, 1);
+  assert.equal(validated.inputTokens, undefined);
 });

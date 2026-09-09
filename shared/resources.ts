@@ -97,6 +97,42 @@ export const listCustomPillsRpc = defineContract({
   }),
 });
 
+export const topTimelineTelemetrySchema = z.object({
+  turnId: z.string().nullable(),
+  agentId: z.string(),
+  outcomeKind: z.enum(["completed", "failed", "canceled"]),
+  outcomeError: z.string().optional(),
+  timestamp: z.string(),
+  durationMs: z.number().optional(),
+  cpuPercent: z.number(),
+  memUsedBytes: z.number(),
+  memTotalBytes: z.number(),
+  memPercent: z.number(),
+  loadAvg1m: z.number(),
+  mcpHealthy: z.number().optional(),
+  mcpTotal: z.number().optional(),
+  branch: z.string().nullable().optional(),
+  worktree: z.string().nullable().optional(),
+  agentTitle: z.string().nullable().optional(),
+  agentModel: z.string().nullable().optional(),
+  agentProvider: z.string().nullable().optional(),
+  uptimeSeconds: z.number().optional(),
+  gitInsertions: z.number().optional(),
+  gitDeletions: z.number().optional(),
+  gitFilesChanged: z.number().optional(),
+  toolCalls: z.number().optional(),
+  toolErrors: z.number().optional(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  contextUsedTokens: z.number().optional(),
+  contextMaxTokens: z.number().optional(),
+  costUsd: z.number().optional(),
+});
+export type TopTimelineTelemetryData = z.infer<typeof topTimelineTelemetrySchema>;
+
+export const TOP_TIMELINE_KIND = "top-turn-telemetry";
+export const TOP_TIMELINE_VERSION = 1;
+
 export const getSystemResourcesRpc = defineContract({
   name: "system-resources.get",
   description: "Retrieve real-time host system resource metrics (CPU, RAM, load, uptime)",
@@ -123,6 +159,7 @@ export const getSystemResourcesRpc = defineContract({
     mcp: McpResourceStatusSchema.nullable().optional(),
     mcpInstalled: z.boolean().optional(),
     customPills: z.array(CustomPillStateSchema).optional(),
+    lastTurn: topTimelineTelemetrySchema.nullable().optional(),
   }),
 });
 
@@ -131,26 +168,355 @@ export type SystemResources = RpcOutput<typeof getSystemResourcesRpc>;
 export const PillModeSchema = z.enum(["cycle", "all", "multiple"]).default("cycle");
 export type PillMode = z.infer<typeof PillModeSchema>;
 
-export const TopSettingsSchema = z.object({
-  pillMode: PillModeSchema,
-  showCpuRam: z.boolean().default(true),
-  showBranch: z.boolean().default(true),
-  showWorktree: z.boolean().default(true),
-  showAgentTitle: z.boolean().default(false),
-  showAgent: z.boolean().default(false),
-  showAgentProvider: z.boolean().default(false),
-  showAgentActivity: z.boolean().default(false),
-  showAgentId: z.boolean().default(true),
-  showLoad: z.boolean().default(false),
-  showUptime: z.boolean().default(false),
-  showMcp: z.boolean().default(true),
-  mcp: z.boolean().default(true),
-  showCustomPills: z.boolean().default(true),
-  customPillEnabled: z.record(z.string(), z.boolean()).default({}),
-  recordTurnTelemetry: z.boolean().default(true),
-  intervalSeconds: z.number().min(1).max(60).default(3),
-  defaultTab: z.enum(["system", "context", "settings", "about"]).default("system"),
-});
+export const SurfaceTargetSchema = z.enum(["pill", "timeline", "both", "none"]);
+export type SurfaceTarget = z.infer<typeof SurfaceTargetSchema>;
+
+export const MetricIdSchema = z.enum([
+  "cpu_ram",
+  "branch",
+  "worktree",
+  "agent_title",
+  "agent",
+  "agent_provider",
+  "agent_activity",
+  "agent_id",
+  "load",
+  "uptime",
+  "mcp",
+  "changes",
+  "tokens",
+]);
+export type MetricId = z.infer<typeof MetricIdSchema>;
+
+export const METRIC_IDS: readonly MetricId[] = [
+  "cpu_ram",
+  "branch",
+  "worktree",
+  "agent_title",
+  "agent",
+  "agent_provider",
+  "agent_activity",
+  "agent_id",
+  "load",
+  "uptime",
+  "mcp",
+  "changes",
+  "tokens",
+];
+
+export const CORE_TIMELINE_METRICS: readonly MetricId[] = [
+  "cpu_ram",
+  "branch",
+  "load",
+  "mcp",
+  "agent_id",
+  "changes",
+  "tokens",
+];
+
+export const DEFAULT_METRIC_SURFACES: Record<MetricId, SurfaceTarget> = {
+  cpu_ram: "both",
+  branch: "both",
+  worktree: "pill",
+  agent_id: "both",
+  load: "both",
+  uptime: "none",
+  mcp: "both",
+  agent_title: "none",
+  agent: "none",
+  agent_provider: "none",
+  agent_activity: "none",
+  changes: "timeline",
+  tokens: "timeline",
+};
+
+export interface MetricDefinition {
+  id: MetricId;
+  title: string;
+  description: string;
+  icon: string;
+  core?: boolean;
+}
+
+export const METRIC_DEFINITIONS: MetricDefinition[] = [
+  {
+    id: "cpu_ram",
+    title: "CPU & RAM",
+    description: "Host CPU utilization and memory consumption",
+    icon: "Cpu",
+    core: true,
+  },
+  {
+    id: "branch",
+    title: "Git Branch",
+    description: "Active Git branch in agent workspace",
+    icon: "GitBranch",
+    core: true,
+  },
+  {
+    id: "load",
+    title: "System Load",
+    description: "1-minute host system load average",
+    icon: "Activity",
+    core: true,
+  },
+  {
+    id: "mcp",
+    title: "MCP Server Health",
+    description: "Connected MCP server count and status snapshots",
+    icon: "Server",
+    core: true,
+  },
+  {
+    id: "agent_id",
+    title: "Agent ID",
+    description: "Agent session short ID",
+    icon: "Hash",
+    core: true,
+  },
+  {
+    id: "worktree",
+    title: "Worktree Location",
+    description: "Workspace directory or worktree path",
+    icon: "Folder",
+  },
+  {
+    id: "agent",
+    title: "Agent Model",
+    description: "Active LLM model identifier",
+    icon: "Bot",
+  },
+  {
+    id: "agent_provider",
+    title: "Agent Provider",
+    description: "LLM provider name (e.g. anthropic, openai)",
+    icon: "Globe",
+  },
+  {
+    id: "agent_activity",
+    title: "Agent Activity",
+    description: "Current execution status or inactivity duration",
+    icon: "Clock",
+  },
+  {
+    id: "agent_title",
+    title: "Agent Title",
+    description: "Agent tab display title",
+    icon: "Tag",
+  },
+  {
+    id: "uptime",
+    title: "Host Uptime",
+    description: "System running duration since boot",
+    icon: "Power",
+  },
+  {
+    id: "changes",
+    title: "Git Changes",
+    description: "Per-turn git insertions, deletions, and files changed",
+    icon: "GitCommitHorizontal",
+  },
+  {
+    id: "tokens",
+    title: "Token Usage",
+    description: "Per-turn input/output tokens and context window use",
+    icon: "Coins",
+  },
+];
+
+export function isPillEnabled(target?: SurfaceTarget): boolean {
+  return target === "pill" || target === "both";
+}
+
+export function isTimelineEnabled(target?: SurfaceTarget): boolean {
+  return target === "timeline" || target === "both";
+}
+
+export function targetFromCheckboxes(pill: boolean, timeline: boolean): SurfaceTarget {
+  if (pill && timeline) return "both";
+  if (pill) return "pill";
+  if (timeline) return "timeline";
+  return "none";
+}
+
+export function checkboxesFromTarget(target?: SurfaceTarget): { pill: boolean; timeline: boolean } {
+  const t = target ?? "none";
+  return {
+    pill: t === "pill" || t === "both",
+    timeline: t === "timeline" || t === "both",
+  };
+}
+
+export function isCoreTimelineMetric(metricId: MetricId): boolean {
+  return (CORE_TIMELINE_METRICS as readonly string[]).includes(metricId);
+}
+
+export interface LegacyFlagView {
+  showCpuRam: boolean;
+  showBranch: boolean;
+  showWorktree: boolean;
+  showAgentTitle: boolean;
+  showAgent: boolean;
+  showAgentProvider: boolean;
+  showAgentActivity: boolean;
+  showAgentId: boolean;
+  showLoad: boolean;
+  showUptime: boolean;
+  showMcp: boolean;
+}
+
+/**
+ * Projects per-metric surface selectors back onto the legacy boolean flags
+ * consumed by pill rendering. Selectors win when present; raw legacy flags
+ * apply only to settings objects that predate migration.
+ */
+export function legacyFlagView(settings: {
+  metricSurfaces?: Partial<Record<MetricId, SurfaceTarget>>;
+  showCpuRam?: boolean;
+  showBranch?: boolean;
+  showWorktree?: boolean;
+  showAgentTitle?: boolean;
+  showAgent?: boolean;
+  showAgentProvider?: boolean;
+  showAgentActivity?: boolean;
+  showAgentId?: boolean;
+  showLoad?: boolean;
+  showUptime?: boolean;
+  showMcp?: boolean;
+  mcp?: boolean;
+}): LegacyFlagView {
+  const s = settings.metricSurfaces;
+  if (!s) {
+    return {
+      showCpuRam: settings.showCpuRam ?? true,
+      showBranch: settings.showBranch ?? true,
+      showWorktree: settings.showWorktree ?? true,
+      showAgentTitle: settings.showAgentTitle ?? false,
+      showAgent: settings.showAgent ?? false,
+      showAgentProvider: settings.showAgentProvider ?? false,
+      showAgentActivity: settings.showAgentActivity ?? false,
+      showAgentId: settings.showAgentId ?? true,
+      showLoad: settings.showLoad ?? false,
+      showUptime: settings.showUptime ?? false,
+      showMcp: settings.showMcp ?? settings.mcp ?? true,
+    };
+  }
+  const pill = (id: MetricId): boolean => isPillEnabled(s[id]);
+  return {
+    showCpuRam: pill("cpu_ram"),
+    showBranch: pill("branch"),
+    showWorktree: pill("worktree"),
+    showAgentTitle: pill("agent_title"),
+    showAgent: pill("agent"),
+    showAgentProvider: pill("agent_provider"),
+    showAgentActivity: pill("agent_activity"),
+    showAgentId: pill("agent_id"),
+    showLoad: pill("load"),
+    showUptime: pill("uptime"),
+    showMcp: pill("mcp"),
+  };
+}
+
+/**
+ * Migrates legacy boolean toggles and single recordTurnTelemetry switch into the
+ * per-metric SurfaceTarget model: Record<MetricId, "pill" | "timeline" | "both" | "none">.
+ */
+export function migrateLegacyMetricSurfaces(raw: Record<string, unknown>): Record<MetricId, SurfaceTarget> {
+  if (raw.metricSurfaces && typeof raw.metricSurfaces === "object") {
+    const custom = raw.metricSurfaces as Partial<Record<MetricId, SurfaceTarget>>;
+    const resolved: Record<MetricId, SurfaceTarget> = { ...DEFAULT_METRIC_SURFACES };
+    for (const id of METRIC_IDS) {
+      if (custom[id] && SurfaceTargetSchema.safeParse(custom[id]).success) {
+        resolved[id] = custom[id]!;
+      }
+    }
+    return resolved;
+  }
+
+  const hasLegacyKey =
+    "recordTurnTelemetry" in raw ||
+    "showCpuRam" in raw ||
+    "showBranch" in raw ||
+    "showWorktree" in raw ||
+    "showAgentId" in raw ||
+    "showLoad" in raw ||
+    "showUptime" in raw ||
+    "showMcp" in raw ||
+    "mcp" in raw ||
+    "showAgentTitle" in raw ||
+    "showAgent" in raw ||
+    "showAgentProvider" in raw ||
+    "showAgentActivity" in raw;
+
+  if (!hasLegacyKey) {
+    return { ...DEFAULT_METRIC_SURFACES };
+  }
+
+  const singleSwitch = raw.recordTurnTelemetry;
+  const singleSwitchOn = singleSwitch !== false;
+
+  const legacyPillMap: Record<MetricId, boolean> = {
+    cpu_ram: typeof raw.showCpuRam === "boolean" ? raw.showCpuRam : true,
+    branch: typeof raw.showBranch === "boolean" ? raw.showBranch : true,
+    worktree: typeof raw.showWorktree === "boolean" ? raw.showWorktree : true,
+    agent_id: typeof raw.showAgentId === "boolean" ? raw.showAgentId : true,
+    load: typeof raw.showLoad === "boolean" ? raw.showLoad : false,
+    uptime: typeof raw.showUptime === "boolean" ? raw.showUptime : false,
+    mcp: typeof raw.showMcp === "boolean" ? raw.showMcp : (typeof raw.mcp === "boolean" ? raw.mcp : true),
+    agent_title: typeof raw.showAgentTitle === "boolean" ? raw.showAgentTitle : false,
+    agent: typeof raw.showAgent === "boolean" ? raw.showAgent : false,
+    agent_provider: typeof raw.showAgentProvider === "boolean" ? raw.showAgentProvider : false,
+    agent_activity: typeof raw.showAgentActivity === "boolean" ? raw.showAgentActivity : false,
+    changes: false,
+    tokens: false,
+  };
+
+  const result: Record<MetricId, SurfaceTarget> = { ...DEFAULT_METRIC_SURFACES };
+
+  for (const id of METRIC_IDS) {
+    const pill = legacyPillMap[id];
+    // If single switch was on: on = both for core metrics
+    // If single switch was off: off = none for timeline
+    const timeline = singleSwitchOn && isCoreTimelineMetric(id);
+    result[id] = targetFromCheckboxes(pill, timeline);
+  }
+
+  return result;
+}
+
+export const TopSettingsSchema = z.preprocess(
+  (val) => {
+    if (val && typeof val === "object") {
+      const obj = { ...(val as Record<string, unknown>) };
+      if (!obj.metricSurfaces) {
+        obj.metricSurfaces = migrateLegacyMetricSurfaces(obj);
+      }
+      return obj;
+    }
+    return val;
+  },
+  z.object({
+    pillMode: PillModeSchema,
+    metricSurfaces: z.record(MetricIdSchema, SurfaceTargetSchema).default(DEFAULT_METRIC_SURFACES),
+    showCpuRam: z.boolean().optional(),
+    showBranch: z.boolean().optional(),
+    showWorktree: z.boolean().optional(),
+    showAgentTitle: z.boolean().optional(),
+    showAgent: z.boolean().optional(),
+    showAgentProvider: z.boolean().optional(),
+    showAgentActivity: z.boolean().optional(),
+    showAgentId: z.boolean().optional(),
+    showLoad: z.boolean().optional(),
+    showUptime: z.boolean().optional(),
+    showMcp: z.boolean().optional(),
+    mcp: z.boolean().optional(),
+    showCustomPills: z.boolean().default(true),
+    customPillEnabled: z.record(z.string(), z.boolean()).default({}),
+    recordTurnTelemetry: z.boolean().optional(),
+    intervalSeconds: z.number().min(1).max(60).default(3),
+    defaultTab: z.enum(["system", "context", "settings", "about"]).default("system"),
+  })
+);
 
 export type TopSettings = z.infer<typeof TopSettingsSchema>;
 
@@ -160,22 +526,3 @@ export const topSettingsContract = defineSettingsContract({
   description: "Paseo top composer pill and display settings",
 });
 
-export const topTimelineTelemetrySchema = z.object({
-  turnId: z.string().nullable(),
-  agentId: z.string(),
-  outcomeKind: z.enum(["completed", "failed", "canceled"]),
-  outcomeError: z.string().optional(),
-  timestamp: z.string(),
-  durationMs: z.number().optional(),
-  cpuPercent: z.number(),
-  memUsedBytes: z.number(),
-  memTotalBytes: z.number(),
-  memPercent: z.number(),
-  loadAvg1m: z.number(),
-  mcpHealthy: z.number().optional(),
-  mcpTotal: z.number().optional(),
-});
-export type TopTimelineTelemetryData = z.infer<typeof topTimelineTelemetrySchema>;
-
-export const TOP_TIMELINE_KIND = "top-turn-telemetry";
-export const TOP_TIMELINE_VERSION = 1;
