@@ -134,6 +134,11 @@ Create `~/.paseo/top/pills/docker.jsonc`:
 
 ## Installation
 
+Prerequisites: Node.js and npm must be installed and visible on the
+daemon host PATH. Paseo runs the plugin build step (`npm install`) as the
+daemon user, which on macOS GUI launches does not inherit shell PATH
+(see Troubleshooting below).
+
 Install directly with the Paseo CLI:
 
 ```bash
