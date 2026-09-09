@@ -236,6 +236,7 @@ export interface MetricDefinition {
   description: string;
   icon: string;
   core?: boolean;
+  pillOnly?: boolean;
 }
 
 export const METRIC_DEFINITIONS: MetricDefinition[] = [
@@ -295,8 +296,9 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   {
     id: "agent_activity",
     title: "Agent Activity",
-    description: "Current execution status or inactivity duration",
+    description: "Live idle timer; timeline snapshots would freeze it",
     icon: "Clock",
+    pillOnly: true,
   },
   {
     id: "agent_title",

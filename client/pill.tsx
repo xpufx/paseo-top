@@ -861,47 +861,66 @@ function MetricSurfaceMatrix({
   };
   return (
     <View style={{ gap: 12 }}>
-      {METRIC_DEFINITIONS.map((def) => {
+      {METRIC_DEFINITIONS.map((def, index) => {
         const boxes = checkboxesFromTarget(surfaces[def.id]);
         const unavailable =
           isProviderDependent(def.id) && !provisioned.has(def.id);
+        const timelineDisabled = !!def.pillOnly;
         const disabled = (def.id === "mcp" && !mcpInstalled) || unavailable;
         const setBox = (which: "pill" | "timeline", val: boolean) => {
           const nextBoxes = { ...boxes, [which]: val };
+          if (def.pillOnly) nextBoxes.timeline = false;
           setTarget(
             def.id,
             targetFromCheckboxes(nextBoxes.pill, nextBoxes.timeline),
           );
         };
         return (
-          <View key={def.id} style={unavailable ? { opacity: 0.55 } : undefined}>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}
-            >
-              <Text style={{ fontSize: 12, fontWeight: "600", color: colors.foreground }}>
-                {def.title}
-              </Text>
-            </View>
+          <View
+            key={def.id}
+            style={[
+              unavailable ? { opacity: 0.55 } : undefined,
+              index < METRIC_DEFINITIONS.length - 1
+                ? {
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.border,
+                    paddingBottom: 10,
+                  }
+                : undefined,
+            ]}
+          >
             <Text
-              style={{ fontSize: 11, color: colors.foregroundMuted, marginBottom: 6 }}
+              style={{
+                fontSize: 13,
+                fontWeight: "700",
+                color: colors.foreground,
+                marginBottom: 2,
+              }}
+            >
+              {def.title}
+            </Text>
+            <Text
+              style={{ fontSize: 11, color: colors.foregroundMuted, marginBottom: 8 }}
             >
               {unavailable
                 ? "Not available for this provider yet"
-                : def.id === "mcp" && !mcpInstalled
-                  ? "Requires paseo-mcp-tools plugin (not installed)"
-                  : def.description}
+                : def.pillOnly
+                  ? "Live value only; snapshots would freeze it"
+                  : def.id === "mcp" && !mcpInstalled
+                    ? "Requires paseo-mcp-tools plugin (not installed)"
+                    : def.description}
             </Text>
-            <View style={{ flexDirection: "row", gap: 16 }}>
+            <View style={{ flexDirection: "row", gap: 16, paddingLeft: 4 }}>
               <Toggle
-                label="Pill"
+                label="Show in pill"
                 value={boxes.pill}
                 disabled={disabled}
                 onValueChange={(val) => setBox("pill", val)}
               />
               <Toggle
-                label="Timeline"
-                value={boxes.timeline}
-                disabled={disabled}
+                label="Show in timeline"
+                value={boxes.timeline && !def.pillOnly}
+                disabled={disabled || timelineDisabled}
                 onValueChange={(val) => setBox("timeline", val)}
               />
             </View>
