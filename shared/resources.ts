@@ -185,6 +185,7 @@ export const MetricIdSchema = z.enum([
   "mcp",
   "changes",
   "tokens",
+  "tools",
 ]);
 export type MetricId = z.infer<typeof MetricIdSchema>;
 
@@ -202,6 +203,7 @@ export const METRIC_IDS: readonly MetricId[] = [
   "mcp",
   "changes",
   "tokens",
+  "tools",
 ];
 
 export const CORE_TIMELINE_METRICS: readonly MetricId[] = [
@@ -228,6 +230,7 @@ export const DEFAULT_METRIC_SURFACES: Record<MetricId, SurfaceTarget> = {
   agent_activity: "none",
   changes: "timeline",
   tokens: "timeline",
+  tools: "timeline",
 };
 
 export interface MetricDefinition {
@@ -324,6 +327,12 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
     description: "Per-turn input/output tokens and context window use",
     icon: "Coins",
   },
+  {
+    id: "tools",
+    title: "Tool Calls",
+    description: "Per-turn tool call and error counts",
+    icon: "Wrench",
+  },
 ];
 
 export function isPillEnabled(target?: SurfaceTarget): boolean {
@@ -384,6 +393,7 @@ export const TIMELINE_RENDERED_METRICS: readonly MetricId[] = [
   "uptime",
   "changes",
   "tokens",
+  "tools",
 ];
 
 export interface LegacyFlagView {
@@ -504,6 +514,7 @@ export function migrateLegacyMetricSurfaces(raw: Record<string, unknown>): Recor
     agent_activity: typeof raw.showAgentActivity === "boolean" ? raw.showAgentActivity : false,
     changes: false,
     tokens: false,
+    tools: false,
   };
 
   const result: Record<MetricId, SurfaceTarget> = { ...DEFAULT_METRIC_SURFACES };

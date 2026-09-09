@@ -175,7 +175,8 @@ export type PillItemType =
   | "uptime"
   | "mcp"
   | "changes"
-  | "tokens";
+  | "tokens"
+  | "tools";
 
 export type ModalTab = "system" | "context" | "settings" | "about";
 
@@ -187,6 +188,7 @@ export function getItemTab(item: PillItemType): "system" | "context" {
     case "mcp":
     case "changes":
     case "tokens":
+    case "tools":
       return "system";
     case "branch":
     case "worktree":
@@ -442,6 +444,22 @@ function PillItemContent({
             <Text style={{ color: colors.foregroundMuted }}>{"tok "}</Text>
             <Text style={{ color: colors.foreground, fontWeight: "600" }}>
               {total ?? "--"}
+            </Text>
+          </Text>
+        </View>
+      );
+    }
+    case "tools": {
+      const last = data?.lastTurn;
+      const hasData = last && last.toolCalls != null;
+      return (
+        <View style={styles.pillContainer}>
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: colors.foregroundMuted }}>{"tools "}</Text>
+            <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+              {hasData
+                ? `${last.toolCalls}${last.toolErrors ? ` (${last.toolErrors} err)` : ""}`
+                : "--"}
             </Text>
           </Text>
         </View>
@@ -724,6 +742,9 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
   }
   if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.tokens)) {
     items.push("tokens");
+  }
+  if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.tools)) {
+    items.push("tools");
   }
 
   const [currentIndex, setCurrentIndex] = useState(0);

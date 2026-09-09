@@ -380,12 +380,23 @@ export function TopTimelineTelemetryCard({
           </View>
         )}
 
-        {data.toolCalls != null && data.toolCalls > 0 && (
+        {show("tools") && (
           <View style={styles.vitalChip}>
             <Icon name="Wrench" size={12} color={theme.colors.foregroundMuted} />
-            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
-              {data.toolCalls} tools
-              {data.toolErrors ? ` (${data.toolErrors} err)` : ""}
+            <Text
+              style={[
+                styles.vitalText,
+                {
+                  color:
+                    data.toolCalls != null
+                      ? theme.colors.foreground
+                      : theme.colors.foregroundMuted,
+                },
+              ]}
+            >
+              {data.toolCalls != null
+                ? `${data.toolCalls} tools${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
+                : "tools --"}
             </Text>
           </View>
         )}
