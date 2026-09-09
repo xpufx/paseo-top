@@ -149,6 +149,26 @@ paseo plugin add ./paseo-top
 
 Once installed, it is listed as `top` in `paseo plugin ls`.
 
+## Troubleshooting
+
+### `spawn npm ENOENT` on macOS
+
+The daemon runs plugin build commands (`npm install`) with the GUI app
+PATH, which does not include version-manager shims (nvm, volta, mise) or
+Homebrew paths. Fix with any one of:
+
+```bash
+# Option 1: symlink node and npm somewhere on the default PATH
+sudo ln -sf "$(which node)" /usr/local/bin/node
+sudo ln -sf "$(which npm)" /usr/local/bin/npm
+
+# Option 2: start Paseo from a terminal so it inherits your shell PATH
+open -a Paseo
+
+# Option 3: persist a PATH for GUI apps, then log out and back in
+sudo launchctl config user path "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:$HOME/.nvm/versions/node/$(node -v)/bin"
+```
+
 ## Development
 
 ```bash
