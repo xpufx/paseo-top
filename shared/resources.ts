@@ -375,6 +375,7 @@ export const TIMELINE_RENDERED_METRICS: readonly MetricId[] = [
   "cpu_ram",
   "load",
   "mcp",
+  "agent_id",
   "agent",
   "agent_provider",
   "changes",

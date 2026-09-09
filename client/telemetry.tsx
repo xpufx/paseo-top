@@ -230,6 +230,15 @@ export function TopTimelineTelemetryCard({
           </View>
         )}
 
+        {show("agent_id") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Fingerprint" size={12} color={theme.colors.foregroundMuted} />
+            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+              {data.agentId && data.agentId.length > 7 ? data.agentId.slice(0, 7) : (data.agentId ?? "--")}
+            </Text>
+          </View>
+        )}
+
         {show("agent") && (
           <View style={styles.vitalChip}>
             <Icon name="Bot" size={12} color={theme.colors.foregroundMuted} />
