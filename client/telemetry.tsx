@@ -203,7 +203,7 @@ export function TopTimelineTelemetryCard({
           </View>
         )}
 
-        {show("mcp") && data.mcpTotal != null && (
+        {show("mcp") && (
           <View style={styles.vitalChip}>
             <Icon name="Server" size={12} color={theme.colors.foregroundMuted} />
             <Text
@@ -211,47 +211,62 @@ export function TopTimelineTelemetryCard({
                 styles.vitalText,
                 {
                   color:
-                    (data.mcpHealthy ?? 0) === data.mcpTotal
-                      ? theme.colors.statusSuccess
-                      : theme.colors.statusWarning,
+                    data.mcpTotal == null
+                      ? theme.colors.foregroundMuted
+                      : (data.mcpHealthy ?? 0) === data.mcpTotal
+                        ? theme.colors.statusSuccess
+                        : theme.colors.statusWarning,
                 },
               ]}
             >
-              MCP {data.mcpHealthy ?? 0}/{data.mcpTotal}
+              {data.mcpTotal != null
+                ? `MCP ${data.mcpHealthy ?? 0}/${data.mcpTotal}`
+                : "MCP --"}
             </Text>
           </View>
         )}
 
-        {show("changes") &&
-          (data.gitInsertions != null || data.gitDeletions != null) && (
-            <View style={styles.vitalChip}>
-              <Icon
-                name="GitCommitHorizontal"
-                size={12}
-                color={theme.colors.foregroundMuted}
-              />
-              <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
-                {(data.gitFilesChanged ?? 0) > 0
-                  ? `±${data.gitFilesChanged} files +${data.gitInsertions ?? 0}/-${data.gitDeletions ?? 0}`
-                  : "No changes"}
-              </Text>
-            </View>
-          )}
+        {show("changes") && (
+          <View style={styles.vitalChip}>
+            <Icon
+              name="GitCommitHorizontal"
+              size={12}
+              color={theme.colors.foregroundMuted}
+            />
+            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+              {(data.gitFilesChanged ?? 0) > 0
+                ? `±${data.gitFilesChanged} files +${data.gitInsertions ?? 0}/-${data.gitDeletions ?? 0}`
+                : "No changes"}
+            </Text>
+          </View>
+        )}
 
-        {show("tokens") &&
-          (data.inputTokens != null || data.outputTokens != null) && (
-            <View style={styles.vitalChip}>
-              <Icon name="Coins" size={12} color={theme.colors.foregroundMuted} />
-              <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
-                {(data.inputTokens ?? 0) + (data.outputTokens ?? 0)} tok
-                {data.contextMaxTokens
-                  ? ` (${Math.round(
-                      ((data.contextUsedTokens ?? 0) / data.contextMaxTokens) * 100,
-                    )}% ctx)`
-                  : ""}
-              </Text>
-            </View>
-          )}
+        {show("tokens") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Coins" size={12} color={theme.colors.foregroundMuted} />
+            <Text
+              style={[
+                styles.vitalText,
+                {
+                  color:
+                    data.inputTokens != null || data.outputTokens != null
+                      ? theme.colors.foreground
+                      : theme.colors.foregroundMuted,
+                },
+              ]}
+            >
+              {data.inputTokens != null || data.outputTokens != null
+                ? `${(data.inputTokens ?? 0) + (data.outputTokens ?? 0)} tok${
+                    data.contextMaxTokens
+                      ? ` (${Math.round(
+                          ((data.contextUsedTokens ?? 0) / data.contextMaxTokens) * 100,
+                        )}% ctx)`
+                      : ""
+                  }`
+                : "tok --"}
+            </Text>
+          </View>
+        )}
 
         {data.toolCalls != null && data.toolCalls > 0 && (
           <View style={styles.vitalChip}>
