@@ -9,6 +9,10 @@ import {
   TopSettingsSchema,
   TOP_TIMELINE_KIND,
   TOP_TIMELINE_VERSION,
+  METRIC_IDS,
+  METRIC_DEFINITIONS,
+  PILL_RENDERED_METRICS,
+  TIMELINE_RENDERED_METRICS,
 } from "../shared/resources";
 import { collectTurnTelemetry, customPillPoller, parseGitDiffShortstat, summarizeTurnTimeline } from "./resources";
 
@@ -112,6 +116,34 @@ test("collectTurnTelemetry returns valid telemetry data matching schema", async 
 test("timeline constants are correctly defined", () => {
   assert.equal(TOP_TIMELINE_KIND, "top-turn-telemetry");
   assert.equal(TOP_TIMELINE_VERSION, 1);
+});
+
+test("every offered metric renders somewhere (no offered-but-invisible gaps)", () => {
+  for (const def of METRIC_DEFINITIONS) {
+    if (def.pillOnly) continue;
+    const visible =
+      PILL_RENDERED_METRICS.includes(def.id) ||
+      TIMELINE_RENDERED_METRICS.includes(def.id);
+    assert.equal(
+      visible,
+      true,
+      `metric ${def.id} is offered in settings but renders nowhere`,
+    );
+  }
+  for (const id of TIMELINE_RENDERED_METRICS) {
+    const def = METRIC_DEFINITIONS.find((d) => d.id === id);
+    assert.ok(def, `timeline registry references unknown metric ${id}`);
+    assert.equal(
+      def.pillOnly,
+      undefined,
+      `pill-only metric ${id} must not be in the timeline registry`,
+    );
+  }
+  assert.deepEqual(
+    [...METRIC_IDS].sort(),
+    METRIC_DEFINITIONS.map((d) => d.id).sort(),
+    "every metric id needs a settings definition",
+  );
 });
 
 test("parseGitDiffShortstat parses insertions, deletions, and files", () => {

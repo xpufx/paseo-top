@@ -7,8 +7,12 @@ import { formatBytes } from "paseo-plugin-helper/shared";
 import {
   isTimelineEnabled,
   topSettingsContract,
+  TIMELINE_RENDERED_METRICS,
+  type MetricId,
   type TopTimelineTelemetryData,
 } from "../shared/resources";
+
+export { TIMELINE_RENDERED_METRICS };
 
 export function TopTimelineTelemetryCard({
   item,
@@ -19,7 +23,7 @@ export function TopTimelineTelemetryCard({
   const data = item.data;
   const { settings } = usePluginSettings(topSettingsContract);
   const surfaces = settings.metricSurfaces;
-  const show = (id: "cpu_ram" | "load" | "mcp" | "changes" | "tokens") =>
+  const show = (id: MetricId) =>
     !surfaces || isTimelineEnabled(surfaces[id]);
 
   const styles = useMemo(() => {
@@ -222,6 +226,42 @@ export function TopTimelineTelemetryCard({
               {data.mcpTotal != null
                 ? `MCP ${data.mcpHealthy ?? 0}/${data.mcpTotal}`
                 : "MCP --"}
+            </Text>
+          </View>
+        )}
+
+        {show("agent") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Bot" size={12} color={theme.colors.foregroundMuted} />
+            <Text
+              style={[
+                styles.vitalText,
+                {
+                  color: data.agentModel
+                    ? theme.colors.foreground
+                    : theme.colors.foregroundMuted,
+                },
+              ]}
+            >
+              {data.agentModel ?? "model --"}
+            </Text>
+          </View>
+        )}
+
+        {show("agent_provider") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Globe" size={12} color={theme.colors.foregroundMuted} />
+            <Text
+              style={[
+                styles.vitalText,
+                {
+                  color: data.agentProvider
+                    ? theme.colors.foreground
+                    : theme.colors.foregroundMuted,
+                },
+              ]}
+            >
+              {data.agentProvider ?? "provider --"}
             </Text>
           </View>
         )}

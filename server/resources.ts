@@ -492,6 +492,7 @@ export async function collectTurnTelemetry(
     cwd?: string | null;
     provider?: string | null;
     title?: string | null;
+    model?: string | null;
     timeline?: readonly unknown[];
     gitBefore?: GitDiffStat | null;
   },
@@ -591,7 +592,7 @@ export async function collectTurnTelemetry(
     branch,
     worktree: cwd,
     agentTitle: extra?.title ?? null,
-    agentModel: null,
+    agentModel: extra?.model ?? null,
     agentProvider: extra?.provider ?? null,
     uptimeSeconds,
     gitInsertions,

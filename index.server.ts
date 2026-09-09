@@ -61,6 +61,14 @@ export default function contribute(server: PluginServerContext) {
       turnGitBefore.delete(event.agent.id);
       const durationMs = startTime ? Date.now() - startTime : undefined;
 
+      let agentModel: string | null = null;
+      try {
+        const refetched = await context.paseo.agents.ref(event.agent.id).refresh();
+        agentModel = refetched?.agent?.model ?? null;
+      } catch {
+        // Model stays unknown; the card renders a placeholder
+      }
+
       const telemetry = await collectTurnTelemetry(
         event.turnId,
         event.agent.id,
@@ -70,6 +78,7 @@ export default function contribute(server: PluginServerContext) {
           cwd: event.agent.cwd,
           provider: event.agent.provider,
           title: event.agent.title,
+          model: agentModel,
           timeline: event.timeline,
           gitBefore: gitBefore ?? null,
         },

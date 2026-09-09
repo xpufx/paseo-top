@@ -363,6 +363,24 @@ export function isProviderDependent(metricId: MetricId): boolean {
   return (PROVIDER_DEPENDENT_METRICS as readonly string[]).includes(metricId);
 }
 
+/**
+ * Where each metric renders. The gap test asserts every non-pillOnly metric
+ * appears in at least one registry: offered-but-nowhere-visible is a bug.
+ * Keep these in sync with PillItemContent cases (pill) and
+ * TopTimelineTelemetryCard rows (timeline) in client/.
+ */
+export const PILL_RENDERED_METRICS: readonly MetricId[] = [...METRIC_IDS];
+
+export const TIMELINE_RENDERED_METRICS: readonly MetricId[] = [
+  "cpu_ram",
+  "load",
+  "mcp",
+  "agent",
+  "agent_provider",
+  "changes",
+  "tokens",
+];
+
 export interface LegacyFlagView {
   showCpuRam: boolean;
   showBranch: boolean;
