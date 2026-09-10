@@ -184,6 +184,37 @@ const settingsStorage = new PluginStorage<TopSettings>("top", "settings.json", {
 
 const mcpStorage = new PluginStorage<McpStatusSnapshot>("mcp-tools", "status.json");
 
+interface McpPluginState {
+  running: boolean;
+  installed: boolean;
+}
+
+// Resolving plugin state shells out to the paseo CLI (a full node startup,
+// ~120MB). Uncached per-RPC lookups stampede under client polling and
+// fork-bomb the host, so share one in-flight lookup with a long TTL.
+const MCP_STATE_TTL_MS = 30_000;
+let mcpStateCache: { at: number; state: McpPluginState } | null = null;
+let mcpStateInflight: Promise<McpPluginState> | null = null;
+
+export async function getMcpPluginState(): Promise<McpPluginState> {
+  const now = Date.now();
+  if (mcpStateCache && now - mcpStateCache.at < MCP_STATE_TTL_MS) {
+    return mcpStateCache.state;
+  }
+  if (!mcpStateInflight) {
+    mcpStateInflight = (async (): Promise<McpPluginState> => {
+      const running = await isPluginRunning("mcp-tools");
+      const installed = await isPluginInstalled("mcp-tools");
+      const state = { running, installed };
+      mcpStateCache = { at: Date.now(), state };
+      return state;
+    })().finally(() => {
+      mcpStateInflight = null;
+    });
+  }
+  return mcpStateInflight;
+}
+
 export async function handleGetSettings(): Promise<TopSettings> {
   const data = await settingsStorage.readAsync();
   log.info("Settings read requested", { settings: data });
@@ -279,8 +310,7 @@ export async function handleGetSystemResources(input?: {
   const needBranch = !isSelective || fields.includes("branch");
   const needMcp = !isSelective || fields.includes("mcp");
 
-  const mcpRunning = await isPluginRunning("mcp-tools");
-  const mcpInstalled = await isPluginInstalled("mcp-tools");
+  const { running: mcpRunning, installed: mcpInstalled } = await getMcpPluginState();
 
   let branch: string | null | undefined = undefined;
   if (needBranch) {
@@ -553,8 +583,9 @@ export async function collectTurnTelemetry(
   // Gate on live plugin state, not just the snapshot file: after mcp-tools
   // is removed its status.json stays on disk and would otherwise bake stale
   // counts into every new timeline item. Same check as the live RPC path.
-  const mcpRunning = extra?.mcpRunning ?? (await isPluginRunning("mcp-tools"));
-  const mcpInstalled = extra?.mcpInstalled ?? (await isPluginInstalled("mcp-tools"));
+  const cachedMcp = extra?.mcpRunning === undefined ? await getMcpPluginState() : null;
+  const mcpRunning = extra?.mcpRunning ?? cachedMcp?.running ?? false;
+  const mcpInstalled = extra?.mcpInstalled ?? cachedMcp?.installed ?? false;
   const mcpSnapshotSource = extra?.mcpStorage ?? mcpStorage;
   if (mcpRunning && mcpSnapshotSource.exists()) {
     try {

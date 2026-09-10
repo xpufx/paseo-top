@@ -1,4 +1,5 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
+import { guardRpcHandler } from "paseo-plugin-helper/server";
 import {
   getSystemResourcesRpc,
   getCustomPillsRpc,
@@ -8,6 +9,7 @@ import {
   TOP_TIMELINE_KIND,
   TOP_TIMELINE_VERSION,
   type LiveUsage,
+  type SystemResources,
 } from "./shared/resources";
 import {
   handleGetSystemResources,
@@ -27,10 +29,30 @@ import {
 export default function contribute(server: PluginServerContext) {
   void customPillPoller.start();
 
+  // Shed load instead of hanging the daemon RPC: saturated or slow handlers
+  // answer from the last good snapshot (system-resources) or fail fast.
+  let lastSystemResources: SystemResources | null = null;
+  const guardedSystemResources = guardRpcHandler(
+    async (input: Parameters<typeof handleGetSystemResources>[0]) => {
+      const resources = await handleGetSystemResources(input);
+      lastSystemResources = resources;
+      return resources;
+    },
+    {
+      timeoutMs: 5000,
+      maxInflight: 4,
+      getStale: () => lastSystemResources,
+      onTimeout: ({ timeoutMs }) =>
+        log.warn("system-resources handler timed out", { timeoutMs }),
+      onSaturated: ({ maxInflight }) =>
+        log.warn("system-resources handler saturated, serving stale", { maxInflight }),
+    },
+  );
+
   server.handle(topSettingsContract.get, handleGetSettings);
   server.handle(topSettingsContract.update, handleUpdateSettings);
   server.handle(topSettingsContract.reset, handleResetSettings);
-  server.handle(getSystemResourcesRpc, handleGetSystemResources);
+  server.handle(getSystemResourcesRpc, guardedSystemResources);
   server.handle(getCustomPillsRpc, handleGetCustomPills);
   server.handle(listCustomPillsRpc, handleListCustomPills);
   server.handle(runCustomPillModalCommandRpc, handleRunCustomPillModalCommand);
