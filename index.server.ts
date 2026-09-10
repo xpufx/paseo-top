@@ -40,12 +40,18 @@ export default function contribute(server: PluginServerContext) {
 
   const unsubscribeTurnStarted = server.on("agent.turn_started", (event) => {
     turnStartTimes.set(event.agent.id, Date.now());
-    const before = collectGitDiffStat(event.agent.cwd);
-    if (before) {
-      turnGitBefore.set(event.agent.id, before);
-    } else {
-      turnGitBefore.delete(event.agent.id);
-    }
+    void collectGitDiffStat(event.agent.cwd).then(
+      (before) => {
+        if (before) {
+          turnGitBefore.set(event.agent.id, before);
+        } else {
+          turnGitBefore.delete(event.agent.id);
+        }
+      },
+      () => {
+        turnGitBefore.delete(event.agent.id);
+      },
+    );
   });
 
   const unsubscribeTurnEnded = server.on("agent.turn_ended", async (event, context) => {

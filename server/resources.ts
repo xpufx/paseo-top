@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import child_process from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(child_process.execFile);
 import os from "node:os";
 import {
   getSystemMetrics,
@@ -203,19 +206,23 @@ export async function handleResetSettings(): Promise<TopSettings> {
   return topSettingsContract.defaultSettings;
 }
 
-export function resolveGitBranch(dir?: string | null): string | null {
+export async function resolveGitBranch(dir?: string | null): Promise<string | null> {
   if (!dir || typeof dir !== "string") return null;
   try {
     const gitPath = path.join(dir, ".git");
-    if (!fs.existsSync(gitPath)) return null;
+    try {
+      await fs.promises.access(gitPath);
+    } catch {
+      return null;
+    }
 
     let headFile: string | null = null;
-    const stat = fs.statSync(gitPath);
+    const stat = await fs.promises.stat(gitPath);
     if (stat.isDirectory()) {
       headFile = path.join(gitPath, "HEAD");
     } else if (stat.isFile()) {
       // Worktree pointer file: "gitdir: <path>"
-      const content = fs.readFileSync(gitPath, "utf8").trim();
+      const content = (await fs.promises.readFile(gitPath, "utf8")).trim();
       const match = content.match(/^gitdir:\s*(.+)$/m);
       if (match && match[1]) {
         const gitDir = path.resolve(dir, match[1]);
@@ -223,8 +230,16 @@ export function resolveGitBranch(dir?: string | null): string | null {
       }
     }
 
-    if (headFile && fs.existsSync(headFile)) {
-      const headContent = fs.readFileSync(headFile, "utf8").trim();
+    if (headFile) {
+      let headContent: string;
+      try {
+        headContent = (await fs.promises.readFile(headFile, "utf8")).trim();
+      } catch {
+        headContent = "";
+      }
+      if (!headContent) {
+        // fall through to git command
+      } else {
       const branchMatch = headContent.match(/^ref:\s*refs\/heads\/(.+)$/);
       if (branchMatch && branchMatch[1]) {
         return branchMatch[1];
@@ -232,20 +247,18 @@ export function resolveGitBranch(dir?: string | null): string | null {
       if (/^[0-9a-f]{7,40}$/i.test(headContent)) {
         return headContent.slice(0, 7);
       }
+      }
     }
   } catch {
     // Ignore and fall through to git command
   }
 
   try {
-    const branch = child_process
-      .execSync("git rev-parse --abbrev-ref HEAD", {
-        cwd: dir,
-        timeout: 1500,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      })
-      .trim();
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: dir,
+      timeout: 1500,
+    });
+    const branch = String(stdout).trim();
     return branch && branch !== "HEAD" ? branch : null;
   } catch {
     return null;
@@ -271,7 +284,7 @@ export async function handleGetSystemResources(input?: {
 
   let branch: string | null | undefined = undefined;
   if (needBranch) {
-    branch = resolveGitBranch(input?.directory);
+    branch = await resolveGitBranch(input?.directory);
   }
 
   let cpuUsagePercent: number | undefined = undefined;
@@ -314,7 +327,7 @@ export async function handleGetSystemResources(input?: {
 
     if (process.platform === "linux") {
       try {
-        const meminfo = fs.readFileSync("/proc/meminfo", "utf8");
+        const meminfo = await fs.promises.readFile("/proc/meminfo", "utf8");
         const match = meminfo.match(/MemAvailable:\s+(\d+)\s+kB/);
         if (match && match[1]) {
           const available = parseInt(match[1], 10) * 1024;
@@ -401,15 +414,13 @@ export function parseGitDiffShortstat(output: string): GitDiffStat | null {
   };
 }
 
-export function collectGitDiffStat(cwd: string): GitDiffStat | null {
+export async function collectGitDiffStat(cwd: string): Promise<GitDiffStat | null> {
   try {
-    const output = child_process.execSync("git diff --shortstat", {
+    const { stdout } = await execFileAsync("git", ["diff", "--shortstat"], {
       cwd,
       timeout: 2000,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
     });
-    const trimmed = output.trim();
+    const trimmed = String(stdout).trim();
     if (!trimmed) return { insertions: 0, deletions: 0, filesChanged: 0 };
     return parseGitDiffShortstat(trimmed);
   } catch {
@@ -522,7 +533,7 @@ export async function collectTurnTelemetry(
 
   if (process.platform === "linux") {
     try {
-      const meminfo = fs.readFileSync("/proc/meminfo", "utf8");
+      const meminfo = await fs.promises.readFile("/proc/meminfo", "utf8");
       const match = meminfo.match(/MemAvailable:\s+(\d+)\s+kB/);
       if (match && match[1]) {
         const available = parseInt(match[1], 10) * 1024;
@@ -565,7 +576,7 @@ export async function collectTurnTelemetry(
   }
 
   const cwd = extra?.cwd ?? null;
-  const branch = resolveGitBranch(cwd);
+  const branch = await resolveGitBranch(cwd);
   const uptimeSeconds = Math.floor(os.uptime());
 
   let gitInsertions: number | undefined;
@@ -573,7 +584,7 @@ export async function collectTurnTelemetry(
   let gitFilesChanged: number | undefined;
   if (cwd) {
     const before = extra?.gitBefore ?? null;
-    const after = collectGitDiffStat(cwd);
+    const after = await collectGitDiffStat(cwd);
     if (after) {
       gitInsertions = Math.max(0, after.insertions - (before?.insertions ?? 0));
       gitDeletions = Math.max(0, after.deletions - (before?.deletions ?? 0));
