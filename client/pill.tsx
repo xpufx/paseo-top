@@ -1581,8 +1581,17 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               ].map((modeOption) => {
                 const isSelected = (settings.pillMode ?? "cycle") === modeOption.id;
                 return (
-                  <View
+                  <Pressable
                     key={modeOption.id}
+                    onPress={() => {
+                      triggerHaptic("light");
+                      const newSettings: TopSettings = {
+                        ...settings,
+                        pillMode: modeOption.id as PillMode,
+                      };
+                      updateSettings({ pillMode: modeOption.id as PillMode });
+                      notifySettingsChanged(newSettings);
+                    }}
                     style={[
                       styles.modeCard,
                       {
@@ -1592,15 +1601,6 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                     ]}
                   >
                     <Text
-                      onPress={() => {
-                        triggerHaptic("light");
-                        const newSettings: TopSettings = {
-                          ...settings,
-                          pillMode: modeOption.id as PillMode,
-                        };
-                        updateSettings({ pillMode: modeOption.id as PillMode });
-                        notifySettingsChanged(newSettings);
-                      }}
                       style={[
                         styles.modeTitle,
                         {
@@ -1614,7 +1614,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                     <Text style={[styles.modeDesc, { color: colors.foregroundMuted }]}>
                       {modeOption.desc}
                     </Text>
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>
@@ -2342,15 +2342,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   speedChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   speedChipText: {
-    fontSize: 11,
+    fontSize: 10,
   },
   allInOneContainer: {
     flexDirection: "row",
@@ -2377,24 +2377,25 @@ const styles = StyleSheet.create({
   modeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    paddingTop: 8,
-    paddingBottom: 12,
+    gap: 6,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   modeCard: {
     flex: 1,
-    minWidth: 120,
-    padding: 10,
-    borderRadius: 8,
+    minWidth: 90,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
     borderWidth: 1,
-    gap: 4,
+    gap: 2,
   },
   modeTitle: {
-    fontSize: 11,
+    fontSize: 10,
   },
   modeDesc: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 8,
+    lineHeight: 10,
   },
   mcpList: {
     gap: 8,
