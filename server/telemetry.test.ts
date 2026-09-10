@@ -190,11 +190,29 @@ test("collectTurnTelemetry omits MCP fields when mcp-tools is not running", asyn
     "agent-test",
     { kind: "completed" },
     100,
-    { mcpRunning: false },
+    { mcpRunning: false, mcpInstalled: false },
   );
   assert.equal(telemetry.mcpHealthy, undefined);
   assert.equal(telemetry.mcpTotal, undefined);
+  assert.equal(telemetry.mcpInstalled, false);
   topTimelineTelemetrySchema.parse(telemetry);
+});
+
+test("legacy timeline items without mcpInstalled still parse", () => {
+  const parsed = topTimelineTelemetrySchema.parse({
+    turnId: "turn-legacy-1",
+    agentId: "agent-test",
+    outcomeKind: "completed",
+    timestamp: new Date().toISOString(),
+    cpuPercent: 10,
+    memUsedBytes: 1000,
+    memTotalBytes: 2000,
+    memPercent: 50,
+    loadAvg1m: 0.5,
+    mcpHealthy: 3,
+    mcpTotal: 3,
+  });
+  assert.equal(parsed.mcpInstalled, undefined);
 });
 
 test("parseGitDiffShortstat parses insertions, deletions, and files", () => {

@@ -510,6 +510,7 @@ export async function collectTurnTelemetry(
     timeline?: readonly unknown[];
     gitBefore?: GitDiffStat | null;
     mcpRunning?: boolean;
+    mcpInstalled?: boolean;
   },
 ): Promise<TopTimelineTelemetryData> {
   const metrics = getSystemMetrics();
@@ -540,6 +541,7 @@ export async function collectTurnTelemetry(
   // is removed its status.json stays on disk and would otherwise bake stale
   // counts into every new timeline item. Same check as the live RPC path.
   const mcpRunning = extra?.mcpRunning ?? (await isPluginRunning("mcp-tools"));
+  const mcpInstalled = extra?.mcpInstalled ?? (await isPluginInstalled("mcp-tools"));
   if (mcpRunning && mcpStorage.exists()) {
     try {
       const snap = await mcpStorage.readAsync();
@@ -608,6 +610,7 @@ export async function collectTurnTelemetry(
     loadAvg1m,
     mcpHealthy,
     mcpTotal,
+    mcpInstalled,
     branch,
     worktree: cwd,
     agentTitle: extra?.title ?? null,

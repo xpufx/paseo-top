@@ -215,15 +215,15 @@ export function TopTimelineTelemetryCard({
                 styles.vitalText,
                 {
                   color:
-                    data.mcpTotal == null
-                      ? theme.colors.foregroundMuted
-                      : (data.mcpHealthy ?? 0) === data.mcpTotal
+                    data.mcpInstalled === true && data.mcpTotal != null
+                      ? (data.mcpHealthy ?? 0) === data.mcpTotal
                         ? theme.colors.statusSuccess
-                        : theme.colors.statusWarning,
+                        : theme.colors.statusWarning
+                      : theme.colors.foregroundMuted,
                 },
               ]}
             >
-              {data.mcpTotal != null
+              {data.mcpInstalled === true && data.mcpTotal != null
                 ? `MCP ${data.mcpHealthy ?? 0}/${data.mcpTotal}`
                 : "MCP --"}
             </Text>

@@ -121,6 +121,7 @@ export const topTimelineTelemetrySchema = z.object({
   loadAvg1m: z.number(),
   mcpHealthy: z.number().optional(),
   mcpTotal: z.number().optional(),
+  mcpInstalled: z.boolean().optional(),
   branch: z.string().nullable().optional(),
   worktree: z.string().nullable().optional(),
   agentTitle: z.string().nullable().optional(),
