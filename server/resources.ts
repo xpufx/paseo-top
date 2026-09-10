@@ -509,6 +509,7 @@ export async function collectTurnTelemetry(
     model?: string | null;
     timeline?: readonly unknown[];
     gitBefore?: GitDiffStat | null;
+    mcpRunning?: boolean;
   },
 ): Promise<TopTimelineTelemetryData> {
   const metrics = getSystemMetrics();
@@ -535,7 +536,11 @@ export async function collectTurnTelemetry(
 
   let mcpHealthy: number | undefined;
   let mcpTotal: number | undefined;
-  if (mcpStorage.exists()) {
+  // Gate on live plugin state, not just the snapshot file: after mcp-tools
+  // is removed its status.json stays on disk and would otherwise bake stale
+  // counts into every new timeline item. Same check as the live RPC path.
+  const mcpRunning = extra?.mcpRunning ?? (await isPluginRunning("mcp-tools"));
+  if (mcpRunning && mcpStorage.exists()) {
     try {
       const snap = await mcpStorage.readAsync();
       if (snap && typeof snap.total === "number") {

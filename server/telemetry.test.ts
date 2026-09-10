@@ -184,6 +184,19 @@ test("collectTurnTelemetry passes model and provider through without fabrication
   assert.equal(withNeither.agentProvider, null);
 });
 
+test("collectTurnTelemetry omits MCP fields when mcp-tools is not running", async () => {
+  const telemetry = await collectTurnTelemetry(
+    "turn-mcp-gone",
+    "agent-test",
+    { kind: "completed" },
+    100,
+    { mcpRunning: false },
+  );
+  assert.equal(telemetry.mcpHealthy, undefined);
+  assert.equal(telemetry.mcpTotal, undefined);
+  topTimelineTelemetrySchema.parse(telemetry);
+});
+
 test("parseGitDiffShortstat parses insertions, deletions, and files", () => {
   assert.deepEqual(parseGitDiffShortstat("3 files changed, 40 insertions(+), 12 deletions(-)"), {
     filesChanged: 3,
