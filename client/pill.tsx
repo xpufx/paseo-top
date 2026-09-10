@@ -36,6 +36,9 @@ import {
   triggerHaptic,
   type RenderModalProps,
   type RenderPillProps,
+  type KeyValueProps,
+  type CardHeaderProps,
+  type BadgeProps,
 } from "paseo-plugin-helper/client";
 import {
   formatBytes,
@@ -212,6 +215,29 @@ export function getItemTab(item: PillItemType): "system" | "context" {
 }
 
 const currentCycleTabByAgent = new Map<string, ModalTab>();
+
+// The 0.8 host popover is a narrow column, so every helper text component in
+// the modal path renders through these compact wrappers (2-3pt under helper
+// defaults). Call-site props still win via spread order.
+function CompactKeyValue(props: KeyValueProps) {
+  return (
+    <CompactKeyValue
+      labelStyle={styles.compactKvLabel}
+      valueStyle={styles.compactKvValue}
+      {...props}
+    />
+  );
+}
+
+function CompactCardHeader(props: CardHeaderProps) {
+  return (
+    <CompactCardHeader titleStyle={styles.compactCardTitle} {...props} />
+  );
+}
+
+function CompactBadge(props: BadgeProps) {
+  return <CompactBadge textStyle={styles.compactBadgeText} {...props} />;
+}
 
 interface LiveSnapshot extends SegmentSnapshot {
   workspaceDirectory?: string | null;
@@ -1242,7 +1268,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
   if (isLoading || !data) {
     return (
       <ModalBody refreshing={isRefetching} onRefresh={handleRefresh}>
-        <Text style={{ color: colors.foregroundMuted }}>Loading system metrics…</Text>
+        <Text style={{ color: colors.foregroundMuted, fontSize: 10 }}>Loading system metrics…</Text>
       </ModalBody>
     );
   }
@@ -1282,13 +1308,13 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
           {/* Host Meta Card */}
           <Card variant="elevated">
             <KeyValueGroup columns={1}>
-              <KeyValue label="Host" value={data.hostname ?? "Unknown"} copyable />
-              <KeyValue
+              <CompactKeyValue label="Host" value={data.hostname ?? "Unknown"} copyable />
+              <CompactKeyValue
                 label="Uptime"
                 value={data.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
               />
             </KeyValueGroup>
-            <KeyValue
+            <CompactKeyValue
               label="Processor"
               value={data.cpuModel ?? "--"}
               subValue={data.cpuCores ? `(${data.cpuCores} cores)` : undefined}
@@ -1297,7 +1323,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
 
           {/* CPU Utilization Card */}
           <Card variant="elevated">
-            <Card.Header
+            <CompactCardHeader
               title="CPU Details"
               value={
                 <Text style={[styles.metricHighlight, { color: cpuColor }]}>
@@ -1312,7 +1338,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               height={8}
             />
 
-            <KeyValue
+            <CompactKeyValue
               label="Load Average (1m, 5m, 15m)"
               value={data.loadAvg ? data.loadAvg.map((n) => n.toFixed(2)).join("  ") : "--"}
               mono
@@ -1321,7 +1347,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
 
           {/* Memory Card */}
           <Card variant="elevated">
-            <Card.Header
+            <CompactCardHeader
               title="Memory Details"
               value={
                 <Text style={[styles.metricHighlight, { color: memColor }]}>
@@ -1336,7 +1362,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               height={8}
             />
 
-            <KeyValue
+            <CompactKeyValue
               label="Used / Total"
               value={`${formatBytes(data.memoryUsedBytes ?? 0)} / ${formatBytes(data.memoryTotalBytes ?? 0)}`}
             />
@@ -1345,19 +1371,19 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
           {/* MCP Servers Card */}
           {Boolean(data.mcpInstalled) && (
             <Card variant="elevated">
-              <Card.Header
+              <CompactCardHeader
                 title="MCP Servers"
                 subtitle="Source: paseo-mcp-tools"
                 icon="Server"
                 value={
                   data.mcp ? (
-                    <Badge
+                    <CompactBadge
                       label={data.mcp.isStale ? "Stale Snapshot" : "Live"}
                       variant={data.mcp.isStale ? "warning" : "success"}
                       dot
                     />
                   ) : (
-                    <Badge label="No Data" variant="neutral" />
+                    <CompactBadge label="No Data" variant="neutral" />
                   )
                 }
               />
@@ -1365,15 +1391,15 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               {data.mcp ? (
                 <>
                   <KeyValueGroup columns={1}>
-                    <KeyValue
+                    <CompactKeyValue
                       label="Health"
                       value={`${data.mcp.healthy} healthy / ${data.mcp.total} total`}
                     />
-                    <KeyValue
+                    <CompactKeyValue
                       label="Snapshot Updated"
                       value={formatTimeAgo(data.mcp.updatedAt)}
                     />
-                    <KeyValue
+                    <CompactKeyValue
                       label="Data Provider"
                       value="paseo-mcp-tools"
                     />
@@ -1403,7 +1429,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                                 {srv.latencyMs >= 0 ? `${srv.latencyMs}ms` : "timeout"}
                               </Text>
                             </View>
-                            <Badge label={srv.status} variant={badgeVariant} />
+                            <CompactBadge label={srv.status} variant={badgeVariant} />
                           </View>
                         );
                       })}
@@ -1425,12 +1451,12 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
           {/* Custom Metric Pills Card */}
           {Boolean(data.customPills && data.customPills.length > 0) && (
             <Card variant="elevated">
-              <Card.Header
+              <CompactCardHeader
                 title="Custom Metric Pills"
                 subtitle="Discovered from ~/.paseo/top/pills"
                 icon="Sliders"
                 value={
-                  <Badge
+                  <CompactBadge
                     label={`${data.customPills?.length ?? 0} active`}
                     variant="accent"
                   />
@@ -1438,7 +1464,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               />
               <KeyValueGroup columns={1}>
                 {data.customPills!.map((cp) => (
-                  <KeyValue
+                  <CompactKeyValue
                     key={cp.id}
                     label={cp.title}
                     value={cp.displayValue}
@@ -1455,33 +1481,33 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
         <>
           {/* Workspace Information */}
           <Card variant="elevated">
-            <Card.Header
+            <CompactCardHeader
               title="Workspace & Git"
               icon="GitBranch"
               value={
                 workspace?.status ? (
-                  <Badge label={workspace.status} variant="info" />
+                  <CompactBadge label={workspace.status} variant="info" />
                 ) : undefined
               }
             />
             <KeyValueGroup columns={1}>
-              <KeyValue label="Git Branch" value={data?.branch || "Unknown"} />
-              <KeyValue label="Kind" value={workspace?.kind || "Unknown"} />
+              <CompactKeyValue label="Git Branch" value={data?.branch || "Unknown"} />
+              <CompactKeyValue label="Kind" value={workspace?.kind || "Unknown"} />
             </KeyValueGroup>
             {workspace?.directory ? (
-              <KeyValue label="Worktree Location" value={workspace.directory} copyable mono />
+              <CompactKeyValue label="Worktree Location" value={workspace.directory} copyable mono />
             ) : null}
             {workspace?.name ? (
-              <KeyValue label="Workspace Name" value={workspace.name} />
+              <CompactKeyValue label="Workspace Name" value={workspace.name} />
             ) : null}
             {workspace?.title && workspace.title !== workspace.name ? (
-              <KeyValue label="Workspace Title" value={workspace.title} />
+              <CompactKeyValue label="Workspace Title" value={workspace.title} />
             ) : null}
             {workspace?.projectDisplayName ? (
-              <KeyValue label="Project" value={workspace.projectDisplayName} />
+              <CompactKeyValue label="Project" value={workspace.projectDisplayName} />
             ) : null}
             {workspace?.diffStat ? (
-              <KeyValue
+              <CompactKeyValue
                 label="Git Changes"
                 value={`+${workspace.diffStat.additions}  -${workspace.diffStat.deletions}`}
               />
@@ -1490,12 +1516,12 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
 
           {/* Agent Information */}
           <Card variant="elevated">
-            <Card.Header
+            <CompactCardHeader
               title={agent?.title ? `Agent: ${agent.title}` : "Agent Session"}
               icon="Bot"
               value={
                 agent?.status ? (
-                  <Badge
+                  <CompactBadge
                     label={agent.status}
                     variant={agent.status === "running" ? "success" : "info"}
                   />
@@ -1503,17 +1529,17 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               }
             />
             {agent?.title ? (
-              <KeyValue label="Agent Tab" value={agent.title} />
+              <CompactKeyValue label="Agent Tab" value={agent.title} />
             ) : null}
             {agentId ? (
-              <KeyValue label="Agent ID" value={agentId} copyable mono />
+              <CompactKeyValue label="Agent ID" value={agentId} copyable mono />
             ) : null}
             <KeyValueGroup columns={1}>
-              <KeyValue label="Model" value={agent?.model || "Standard"} />
-              <KeyValue label="Provider" value={agent?.provider || "Default"} />
+              <CompactKeyValue label="Model" value={agent?.model || "Standard"} />
+              <CompactKeyValue label="Provider" value={agent?.provider || "Default"} />
             </KeyValueGroup>
             <KeyValueGroup columns={1}>
-              <KeyValue
+              <CompactKeyValue
                 label="Last Worked"
                 value={
                   agent?.status === "running"
@@ -1521,7 +1547,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                     : formatTimeAgo(agent?.lastActivityAt)
                 }
               />
-              <KeyValue
+              <CompactKeyValue
                 label="Inactivity"
                 value={
                   agent?.status === "running"
@@ -1531,7 +1557,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               />
             </KeyValueGroup>
             {agent?.cwd ? (
-              <KeyValue label="Working Directory" value={agent.cwd} copyable mono />
+              <CompactKeyValue label="Working Directory" value={agent.cwd} copyable mono />
             ) : null}
           </Card>
         </>
@@ -1541,7 +1567,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
         <>
           {/* Pill Display Mode */}
           <Card variant="elevated">
-            <Card.Header
+            <CompactCardHeader
               title="Pill Display Mode"
               icon="LayoutGrid"
               subtitle="How active items appear in the composer trackbar"
@@ -1595,7 +1621,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
 
           {/* Active Pill Items Selectors */}
           <Card variant="elevated">
-            <Card.Header
+            <CompactCardHeader
               title="Active Pill Items"
               icon="Sliders"
               subtitle={
@@ -1634,7 +1660,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
 
           {/* Custom Metric Pills */}
           <Card variant="elevated">
-            <Card.Header
+            <CompactCardHeader
               title="Custom Metric Pills"
               icon="Sliders"
               subtitle="Standalone pills discovered from ~/.paseo/top/pills"
@@ -1643,6 +1669,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               <Toggle
                 label="Show Custom Metric Pills"
                 description="Display pills defined in ~/.paseo/top/pills as standalone composer pills"
+                labelStyle={styles.compactToggleLabel}
                 value={settings.showCustomPills ?? true}
                 onValueChange={(val) => {
                   const s = { ...settings, showCustomPills: val };
@@ -1657,7 +1684,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
           {/* Rotation Speed Setting (Cycle mode only) */}
           {(settings.pillMode ?? "cycle") === "cycle" && (
             <Card variant="elevated">
-              <Card.Header
+              <CompactCardHeader
                 title="Rotation Speed"
                 icon="Clock"
                 value={
@@ -1706,7 +1733,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
 
           {/* Default Modal Tab Setting */}
           <Card variant="elevated">
-            <Card.Header
+            <CompactCardHeader
               title="Default Modal Tab"
               icon="Sliders"
               value={
@@ -1756,6 +1783,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
           <Button
             label="Reset to Defaults"
             variant="secondary"
+            size="sm"
             onPress={() => {
               triggerHaptic("medium");
               resetSettings();
@@ -2253,6 +2281,21 @@ const styles = StyleSheet.create({
   metricHighlight: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  compactKvLabel: {
+    fontSize: 9,
+  },
+  compactKvValue: {
+    fontSize: 10,
+  },
+  compactCardTitle: {
+    fontSize: 11,
+  },
+  compactBadgeText: {
+    fontSize: 9,
+  },
+  compactToggleLabel: {
+    fontSize: 11,
   },
   footer: {
     alignItems: "center",
