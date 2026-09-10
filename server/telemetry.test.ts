@@ -299,3 +299,36 @@ test("collectTurnTelemetry includes git delta and usage when provided", async ()
   assert.equal(validated.gitFilesChanged, 1);
   assert.equal(validated.inputTokens, undefined);
 });
+
+test("metric definitions, ids, defaults, and pill types stay in sync", () => {
+  const defIds = METRIC_DEFINITIONS.map((d) => d.id).sort();
+  assert.deepEqual(
+    defIds,
+    [...METRIC_IDS].sort(),
+    "every metric id needs exactly one matrix definition and vice versa",
+  );
+  for (const def of METRIC_DEFINITIONS) {
+    assert.ok(def.title.length > 0, `metric ${def.id} needs a matrix title`);
+    assert.ok(def.description.length > 0, `metric ${def.id} needs a description`);
+    assert.ok(def.icon.length > 0, `metric ${def.id} needs an icon`);
+  }
+  for (const id of METRIC_IDS) {
+    assert.ok(
+      id in DEFAULT_METRIC_SURFACES,
+      `metric ${id} needs a default surface target`,
+    );
+  }
+  // PillItemType lives in client code (RN imports) so it is compared by
+  // source text: a metric missing from either side breaks pills or settings.
+  const pillSource = fs.readFileSync(
+    path.join(__dirname, "..", "client", "pill.tsx"),
+    "utf8",
+  );
+  const unionBody = pillSource.split("export type PillItemType =")[1].split(";")[0];
+  const pillIds = [...unionBody.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual(
+    pillIds,
+    [...METRIC_IDS].sort(),
+    "PillItemType union must match METRIC_IDS exactly",
+  );
+});
