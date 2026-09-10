@@ -16,6 +16,7 @@ import {
   type PillLiveContext,
   ModalBody,
   Card,
+  CardHeader,
   Button,
   KeyValue,
   KeyValueGroup,
@@ -221,7 +222,7 @@ const currentCycleTabByAgent = new Map<string, ModalTab>();
 // defaults). Call-site props still win via spread order.
 function CompactKeyValue(props: KeyValueProps) {
   return (
-    <CompactKeyValue
+    <KeyValue
       labelStyle={styles.compactKvLabel}
       valueStyle={styles.compactKvValue}
       {...props}
@@ -231,12 +232,12 @@ function CompactKeyValue(props: KeyValueProps) {
 
 function CompactCardHeader(props: CardHeaderProps) {
   return (
-    <CompactCardHeader titleStyle={styles.compactCardTitle} {...props} />
+    <CardHeader titleStyle={styles.compactCardTitle} {...props} />
   );
 }
 
 function CompactBadge(props: BadgeProps) {
-  return <CompactBadge textStyle={styles.compactBadgeText} {...props} />;
+  return <Badge textStyle={styles.compactBadgeText} {...props} />;
 }
 
 interface LiveSnapshot extends SegmentSnapshot {
