@@ -894,10 +894,10 @@ function MetricSurfaceMatrix({
     <View style={{ gap: 12 }}>
       {METRIC_DEFINITIONS.map((def, index) => {
         const boxes = checkboxesFromTarget(surfaces[def.id]);
-        const unavailable =
+        const unprovisioned =
           isProviderDependent(def.id) && !provisioned.has(def.id);
         const timelineDisabled = !!def.pillOnly;
-        const disabled = (def.id === "mcp" && !mcpInstalled) || unavailable;
+        const disabled = def.id === "mcp" && !mcpInstalled;
         const setBox = (which: "pill" | "timeline", val: boolean) => {
           const nextBoxes = { ...boxes, [which]: val };
           if (def.pillOnly) nextBoxes.timeline = false;
@@ -910,7 +910,6 @@ function MetricSurfaceMatrix({
           <View
             key={def.id}
             style={[
-              unavailable ? { opacity: 0.55 } : undefined,
               index < METRIC_DEFINITIONS.length - 1
                 ? {
                     borderBottomWidth: 1,
@@ -933,12 +932,12 @@ function MetricSurfaceMatrix({
             <Text
               style={{ fontSize: 11, color: colors.foregroundMuted, marginBottom: 8 }}
             >
-              {unavailable
-                ? "Not available for this provider yet"
-                : def.pillOnly
-                  ? "Live value only; snapshots would freeze it"
-                  : def.id === "mcp" && !mcpInstalled
-                    ? "Requires paseo-mcp-tools plugin (not installed)"
+              {def.pillOnly
+                ? "Live value only; snapshots would freeze it"
+                : def.id === "mcp" && !mcpInstalled
+                  ? "Requires paseo-mcp-tools plugin (not installed)"
+                  : unprovisioned
+                    ? `${def.description} (waiting for provider data)`
                     : def.description}
             </Text>
             <View style={{ flexDirection: "row", gap: 24, paddingLeft: 4 }}>
@@ -1632,10 +1631,6 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               label: "Host Uptime",
               value: data?.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "unknown",
             },
-            { label: "Active Workspace", value: workspace?.name ?? "none", copyable: true },
-            { label: "Workspace Directory", value: workspace?.directory ?? "unknown", copyable: true },
-            { label: "Active Git Branch", value: data?.branch ?? "unknown", copyable: true },
-            { label: "Agent Model", value: agent?.model ?? "none", copyable: true },
           ]}
         />
       )}
