@@ -407,10 +407,13 @@ export function isProviderDependent(metricId: MetricId): boolean {
 /**
  * Where each metric renders. The gap test asserts every non-pillOnly metric
  * appears in at least one registry: offered-but-nowhere-visible is a bug.
- * Keep these in sync with PillItemContent cases (pill) and
- * TopTimelineTelemetryCard rows (timeline) in client/.
+ * Keep these in sync with PillItemContent cases (pill), the multiple-mode
+ * desiredPills list (dedicated pills), and TopTimelineTelemetryCard rows
+ * (timeline) in client/.
  */
 export const PILL_RENDERED_METRICS: readonly MetricId[] = [...METRIC_IDS];
+
+export const MULTIPLE_MODE_RENDERED_METRICS: readonly MetricId[] = [...METRIC_IDS];
 
 export const TIMELINE_RENDERED_METRICS: readonly MetricId[] = [
   "cpu_ram",

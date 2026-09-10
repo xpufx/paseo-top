@@ -735,16 +735,18 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
     [workspaceDirectory],
   );
 
-  // Collect available items enabled by user settings (or fallback to cpu_ram)
+  // Collect available items enabled by user settings (or fallback to cpu_ram).
+  // Visibility is selector-only: components render placeholders when data is
+  // absent, so every mode agrees on what is shown.
   const items: PillItemType[] = [];
   if (effectiveShowCpuRam) items.push("cpu_ram");
   if (flags.showBranch) items.push("branch");
-  if (flags.showWorktree && workspaceDirectory) items.push("worktree");
-  if (flags.showAgentTitle && agent?.title) items.push("agent_title");
-  if (flags.showAgent && (agent?.model || agent?.provider)) items.push("agent");
-  if (flags.showAgentProvider && agent?.provider) items.push("agent_provider");
-  if (flags.showAgentActivity && (agent?.lastActivityAt || agent?.status)) items.push("agent_activity");
-  if (flags.showAgentId && agentId) items.push("agent_id");
+  if (flags.showWorktree) items.push("worktree");
+  if (flags.showAgentTitle) items.push("agent_title");
+  if (flags.showAgent) items.push("agent");
+  if (flags.showAgentProvider) items.push("agent_provider");
+  if (flags.showAgentActivity) items.push("agent_activity");
+  if (flags.showAgentId) items.push("agent_id");
   if (flags.showLoad) items.push("load");
   if (flags.showUptime) items.push("uptime");
   if (isMcpEnabled) items.push("mcp");
@@ -860,6 +862,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
         item={activeMode}
         data={data}
         agent={agent}
+        agentId={agentId}
         worktreeLocationText={worktreeLocationText}
         isOpen={isOpen}
       />
@@ -1875,6 +1878,33 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           id: "paseo-top-mcp",
           item: "mcp",
           title: "MCP Health",
+          modalTitle: "Host System Resources",
+          defaultTab: "system",
+        });
+      }
+      if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.changes)) {
+        desiredPills.push({
+          id: "paseo-top-changes",
+          item: "changes",
+          title: "Git Changes",
+          modalTitle: "Host System Resources",
+          defaultTab: "system",
+        });
+      }
+      if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.tokens)) {
+        desiredPills.push({
+          id: "paseo-top-tokens",
+          item: "tokens",
+          title: "Token Usage",
+          modalTitle: "Host System Resources",
+          defaultTab: "system",
+        });
+      }
+      if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.tools)) {
+        desiredPills.push({
+          id: "paseo-top-tools",
+          item: "tools",
+          title: "Tool Calls",
           modalTitle: "Host System Resources",
           defaultTab: "system",
         });

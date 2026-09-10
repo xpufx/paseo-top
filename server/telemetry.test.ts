@@ -12,6 +12,7 @@ import {
   METRIC_IDS,
   METRIC_DEFINITIONS,
   PILL_RENDERED_METRICS,
+  MULTIPLE_MODE_RENDERED_METRICS,
   TIMELINE_RENDERED_METRICS,
   DEFAULT_METRIC_SURFACES,
   isMcpSurfaceEnabled,
@@ -144,6 +145,20 @@ test("every offered metric renders somewhere (no offered-but-invisible gaps)", (
   for (const id of PILL_RENDERED_METRICS) {
     const def = METRIC_DEFINITIONS.find((d) => d.id === id);
     assert.ok(def, `pill registry references unknown metric ${id}`);
+  }
+  for (const id of PILL_RENDERED_METRICS) {
+    assert.ok(
+      MULTIPLE_MODE_RENDERED_METRICS.includes(id),
+      `pill metric ${id} has no dedicated pill in multiple mode`,
+    );
+  }
+  for (const id of MULTIPLE_MODE_RENDERED_METRICS) {
+    const def = METRIC_DEFINITIONS.find((d) => d.id === id);
+    assert.ok(def, `multiple-mode registry references unknown metric ${id}`);
+    assert.ok(
+      (METRIC_IDS as readonly string[]).includes(id),
+      `multiple-mode registry references undefined metric id ${id}`,
+    );
   }
   for (const id of METRIC_IDS) {
     assert.ok(
