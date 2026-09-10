@@ -629,6 +629,7 @@ export const TopSettingsSchema = z.preprocess(
     showUptime: z.boolean().optional(),
     showMcp: z.boolean().optional(),
     mcp: z.boolean().optional(),
+    showComposerPill: z.boolean().default(true),
     showCustomPills: z.boolean().default(true),
     customPillEnabled: z.record(z.string(), z.boolean()).default({}),
     provisionedMetrics: z.array(MetricIdSchema).default([]),

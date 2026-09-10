@@ -11,6 +11,7 @@ import {
   type PluginClientContext,
 } from "@getpaseo/plugin/client";
 import {
+  PluginThemeProvider,
   registerComposerPill,
   type ComposerPillRegistrar,
   type PillLiveContext,
@@ -73,6 +74,7 @@ import {
   type SurfaceTarget,
 } from "../shared/resources";
 import { PLUGIN_VERSION } from "../shared/version";
+import { TopDashboardSurface } from "./surface";
 import {
   buildAllLabel,
   enabledItemsForSettings,
@@ -1618,6 +1620,18 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                 );
               })}
             </View>
+            <View style={{ marginTop: 12 }}>
+              <Toggle
+                label="Show Composer Pill"
+                description="Hide the composer pill entirely; the dashboard stays available from the sidebar"
+                value={settings.showComposerPill ?? true}
+                onValueChange={(val) => {
+                  const next = { ...settings, showComposerPill: val };
+                  updateSettings({ showComposerPill: val });
+                  notifySettingsChanged(next);
+                }}
+              />
+            </View>
           </Card>
 
           {/* Active Pill Items Selectors */}
@@ -1907,12 +1921,41 @@ function LiveCustomPillModal({ pillId, initial }: LiveCustomPillModalProps) {
   );
 }
 
+let sidebarCleanup: (() => void) | null = null;
+
 export function contributeClient(client: ComposerPillRegistrar | PluginClientContext) {
+  if (!sidebarCleanup && "addSurface" in client && "addSidebarItem" in client) {
+    const removeSurface = client.addSurface("paseo-top-dashboard", (props) => (
+      <PluginThemeProvider
+        theme={props.theme}
+        layout={props.layout}
+      >
+        <TopDashboardSurface {...props} />
+      </PluginThemeProvider>
+    ));
+    const removeItem = client.addSidebarItem({
+      id: "paseo-top-dashboard",
+      title: "Top Dashboard",
+      icon: "Activity",
+      surface: "paseo-top-dashboard",
+    });
+    sidebarCleanup = () => {
+      removeSurface();
+      removeItem();
+    };
+  }
   const activePills = new Map<string, () => void>();
   let latestSettings: TopSettings = topSettingsContract.defaultSettings;
 
   function syncPills(settings: TopSettings) {
     latestSettings = settings;
+    if (settings.showComposerPill === false) {
+      for (const [, cleanup] of activePills.entries()) {
+        cleanup();
+      }
+      activePills.clear();
+      return;
+    }
     const flags = legacyFlagView(settings);
     const mode = settings.pillMode ?? "cycle";
 
@@ -2181,6 +2224,13 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
   const activeCustomPills = new Map<string, () => void>();
 
   async function syncCustomPills() {
+    if (latestSettings.showComposerPill === false) {
+      for (const [id, cleanup] of activeCustomPills.entries()) {
+        cleanup();
+        activeCustomPills.delete(id);
+      }
+      return;
+    }
     const showCustom = latestSettings.showCustomPills ?? true;
     if (!showCustom) {
       // Master toggle off: unregister all custom pills
@@ -2249,6 +2299,10 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
   settingsListeners.add(onSettingsChanged);
 
   return () => {
+    if (sidebarCleanup) {
+      sidebarCleanup();
+      sidebarCleanup = null;
+    }
     clearInterval(customPillInterval);
     settingsListeners.delete(syncPills);
     settingsListeners.delete(onSettingsChanged);
