@@ -14,6 +14,7 @@ import {
   PILL_RENDERED_METRICS,
   TIMELINE_RENDERED_METRICS,
   DEFAULT_METRIC_SURFACES,
+  isMcpSurfaceEnabled,
 } from "../shared/resources";
 import { collectTurnTelemetry, customPillPoller, parseGitDiffShortstat, summarizeTurnTimeline } from "./resources";
 
@@ -198,8 +199,7 @@ test("collectTurnTelemetry omits MCP fields when mcp-tools is not running", asyn
   topTimelineTelemetrySchema.parse(telemetry);
 });
 
-test("legacy timeline items without mcpInstalled still parse", () => {
-  const parsed = topTimelineTelemetrySchema.parse({
+test("legacy timeline items without mcpInstalled still parse", () => {  const parsed = topTimelineTelemetrySchema.parse({
     turnId: "turn-legacy-1",
     agentId: "agent-test",
     outcomeKind: "completed",
@@ -213,6 +213,21 @@ test("legacy timeline items without mcpInstalled still parse", () => {
     mcpTotal: 3,
   });
   assert.equal(parsed.mcpInstalled, undefined);
+});
+
+test("isMcpSurfaceEnabled gates the mcp surface on positive presence", () => {
+  const both = { metricSurfaces: { mcp: "both" as const } };
+  const none = { metricSurfaces: { mcp: "none" as const } };
+  assert.equal(isMcpSurfaceEnabled(both, "pill", true), true);
+  assert.equal(isMcpSurfaceEnabled(both, "timeline", true), true);
+  assert.equal(isMcpSurfaceEnabled(none, "pill", true), false);
+  assert.equal(isMcpSurfaceEnabled(none, "timeline", true), false);
+  assert.equal(isMcpSurfaceEnabled(both, "pill", false), false);
+  assert.equal(isMcpSurfaceEnabled(both, "timeline", false), false);
+  assert.equal(isMcpSurfaceEnabled(both, "pill", undefined), false);
+  assert.equal(isMcpSurfaceEnabled(both, "timeline", undefined), false);
+  assert.equal(isMcpSurfaceEnabled({}, "timeline", true), true);
+  assert.equal(isMcpSurfaceEnabled({ showMcp: false }, "pill", true), false);
 });
 
 test("parseGitDiffShortstat parses insertions, deletions, and files", () => {

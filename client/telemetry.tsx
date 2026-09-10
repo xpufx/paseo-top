@@ -6,6 +6,7 @@ import { usePluginSettings } from "paseo-plugin-helper/client";
 import { formatBytes, formatUptime } from "paseo-plugin-helper/shared";
 import {
   isTimelineEnabled,
+  isMcpSurfaceEnabled,
   topSettingsContract,
   TIMELINE_RENDERED_METRICS,
   type MetricId,
@@ -25,6 +26,7 @@ export function TopTimelineTelemetryCard({
   const surfaces = settings.metricSurfaces;
   const show = (id: MetricId) =>
     !surfaces || isTimelineEnabled(surfaces[id]);
+  const showMcp = isMcpSurfaceEnabled(settings, "timeline", data.mcpInstalled);
 
   const styles = useMemo(() => {
     const isFailed = data.outcomeKind === "failed";
@@ -207,7 +209,7 @@ export function TopTimelineTelemetryCard({
           </View>
         )}
 
-        {show("mcp") && (
+        {showMcp && (
           <View style={styles.vitalChip}>
             <Icon name="Server" size={12} color={theme.colors.foregroundMuted} />
             <Text
@@ -215,15 +217,15 @@ export function TopTimelineTelemetryCard({
                 styles.vitalText,
                 {
                   color:
-                    data.mcpInstalled === true && data.mcpTotal != null
-                      ? (data.mcpHealthy ?? 0) === data.mcpTotal
+                    data.mcpTotal == null
+                      ? theme.colors.foregroundMuted
+                      : (data.mcpHealthy ?? 0) === data.mcpTotal
                         ? theme.colors.statusSuccess
-                        : theme.colors.statusWarning
-                      : theme.colors.foregroundMuted,
+                        : theme.colors.statusWarning,
                 },
               ]}
             >
-              {data.mcpInstalled === true && data.mcpTotal != null
+              {data.mcpTotal != null
                 ? `MCP ${data.mcpHealthy ?? 0}/${data.mcpTotal}`
                 : "MCP --"}
             </Text>

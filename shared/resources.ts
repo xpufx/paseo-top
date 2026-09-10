@@ -355,6 +355,28 @@ export function isTimelineEnabled(target?: SurfaceTarget): boolean {
   return target === "timeline" || target === "both";
 }
 
+/**
+ * Single presence-gated read point for the MCP metric surface. Every surface
+ * (pill, timeline) resolves through here so uninstalled means invisible
+ * everywhere with no per-call-site presence checks. Fail-closed: anything
+ * other than positively installed (including unknown) resolves to off.
+ */
+export function isMcpSurfaceEnabled(
+  settings: {
+    metricSurfaces?: Partial<Record<MetricId, SurfaceTarget>>;
+    showMcp?: boolean;
+    mcp?: boolean;
+  },
+  surface: "pill" | "timeline",
+  mcpInstalled?: boolean,
+): boolean {
+  if (mcpInstalled !== true) return false;
+  if (surface === "pill") return legacyFlagView(settings).showMcp;
+  const s = settings.metricSurfaces;
+  if (!s) return true;
+  return isTimelineEnabled(s["mcp"]);
+}
+
 export function targetFromCheckboxes(pill: boolean, timeline: boolean): SurfaceTarget {
   if (pill && timeline) return "both";
   if (pill) return "pill";

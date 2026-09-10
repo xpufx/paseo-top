@@ -52,6 +52,7 @@ import {
   isPillEnabled,
   isProviderDependent,
   legacyFlagView,
+  isMcpSurfaceEnabled,
   METRIC_DEFINITIONS,
   DEFAULT_METRIC_SURFACES,
   checkboxesFromTarget,
@@ -703,7 +704,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
     },
   );
 
-  const isMcpEnabled = (flags.showMcp) && Boolean(data?.mcpInstalled);
+  const isMcpEnabled = isMcpSurfaceEnabled(settings, "pill", data?.mcpInstalled);
 
   useEffect(() => {
     const found: MetricId[] = [];
@@ -1030,7 +1031,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
     },
   );
 
-  const isMcpEnabled = (flags.showMcp) && Boolean(data?.mcpInstalled);
+  const isMcpEnabled = isMcpSurfaceEnabled(settings, "pill", data?.mcpInstalled);
 
   const hasAnyPillEnabled =
     flags.showCpuRam ||
