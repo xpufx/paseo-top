@@ -122,6 +122,7 @@ export const topTimelineTelemetrySchema = z.object({
   mcpHealthy: z.number().optional(),
   mcpTotal: z.number().optional(),
   mcpInstalled: z.boolean().optional(),
+  mcpRunning: z.boolean().optional(),
   branch: z.string().nullable().optional(),
   worktree: z.string().nullable().optional(),
   agentTitle: z.string().nullable().optional(),
@@ -169,6 +170,7 @@ export const getSystemResourcesRpc = defineContract({
     branch: z.string().nullable().optional(),
     mcp: McpResourceStatusSchema.nullable().optional(),
     mcpInstalled: z.boolean().optional(),
+    mcpRunning: z.boolean().optional(),
     customPills: z.array(CustomPillStateSchema).optional(),
     lastTurn: topTimelineTelemetrySchema.nullable().optional(),
     liveUsage: liveUsageSchema.nullable().optional(),
@@ -361,6 +363,20 @@ export function isTimelineEnabled(target?: SurfaceTarget): boolean {
  * everywhere with no per-call-site presence checks. Fail-closed: anything
  * other than positively installed (including unknown) resolves to off.
  */
+/**
+ * Surface visibility contract (single source of truth for pill and card):
+ * selected + live data -> value; selected + not-yet-observed -> placeholder;
+ * selected + known-dead source -> hidden on both surfaces; unselected -> hidden.
+ * A disabled dependency is known-dead, never placeholder material.
+ */
+export function isSourceDead(
+  id: MetricId,
+  status: { mcpRunning?: boolean | null },
+): boolean {
+  if (id === "mcp") return status?.mcpRunning === false;
+  return false;
+}
+
 export function isMcpSurfaceEnabled(
   settings: {
     metricSurfaces?: Partial<Record<MetricId, SurfaceTarget>>;
@@ -369,8 +385,10 @@ export function isMcpSurfaceEnabled(
   },
   surface: "pill" | "timeline",
   mcpInstalled?: boolean,
+  mcpRunning?: boolean | null,
 ): boolean {
   if (mcpInstalled !== true) return false;
+  if (mcpRunning === false) return false;
   if (surface === "pill") return legacyFlagView(settings).showMcp;
   const s = settings.metricSurfaces;
   if (!s) return true;

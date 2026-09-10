@@ -376,6 +376,7 @@ export async function handleGetSystemResources(input?: {
     branch,
     mcp,
     mcpInstalled,
+    mcpRunning,
     customPills: customPillPoller
       .getAllStates()
       .filter((state) => effectiveEnabled.has(state.id)),
@@ -611,6 +612,7 @@ export async function collectTurnTelemetry(
     mcpHealthy,
     mcpTotal,
     mcpInstalled,
+    mcpRunning,
     branch,
     worktree: cwd,
     agentTitle: extra?.title ?? null,

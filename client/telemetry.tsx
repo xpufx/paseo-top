@@ -26,7 +26,7 @@ export function TopTimelineTelemetryCard({
   const surfaces = settings.metricSurfaces;
   const show = (id: MetricId) =>
     !surfaces || isTimelineEnabled(surfaces[id]);
-  const showMcp = isMcpSurfaceEnabled(settings, "timeline", data.mcpInstalled);
+  const showMcp = isMcpSurfaceEnabled(settings, "timeline", data.mcpInstalled, data.mcpRunning);
 
   const styles = useMemo(() => {
     const isFailed = data.outcomeKind === "failed";

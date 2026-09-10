@@ -704,7 +704,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
     },
   );
 
-  const isMcpEnabled = isMcpSurfaceEnabled(settings, "pill", data?.mcpInstalled);
+  const isMcpEnabled = isMcpSurfaceEnabled(settings, "pill", data?.mcpInstalled, data?.mcpRunning);
 
   useEffect(() => {
     const found: MetricId[] = [];
@@ -879,11 +879,13 @@ function MetricSurfaceMatrix({
   updateSettings,
   notifySettingsChanged,
   mcpInstalled,
+  mcpRunning,
 }: {
   settings: TopSettings;
   updateSettings: (updates: Partial<TopSettings>) => void;
   notifySettingsChanged: (s: TopSettings) => void;
   mcpInstalled: boolean;
+  mcpRunning?: boolean | null;
 }) {
   const { colors } = usePluginTheme();
   const surfaces = settings.metricSurfaces ?? DEFAULT_METRIC_SURFACES;
@@ -940,6 +942,8 @@ function MetricSurfaceMatrix({
                 ? "Live value only; snapshots would freeze it"
                 : def.id === "mcp" && !mcpInstalled
                   ? "Requires paseo-mcp-tools plugin (not installed)"
+                  : def.id === "mcp" && mcpRunning === false
+                    ? "mcp-tools is disabled: surfaces hidden until it runs"
                   : unprovisioned
                     ? `${def.description} (waiting for provider data)`
                     : def.description}
@@ -1034,7 +1038,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
     },
   );
 
-  const isMcpEnabled = isMcpSurfaceEnabled(settings, "pill", data?.mcpInstalled);
+  const isMcpEnabled = isMcpSurfaceEnabled(settings, "pill", data?.mcpInstalled, data?.mcpRunning);
 
   const hasAnyPillEnabled =
     flags.showCpuRam ||
@@ -1450,6 +1454,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                 updateSettings={updateSettings}
                 notifySettingsChanged={notifySettingsChanged}
                 mcpInstalled={Boolean(data?.mcpInstalled)}
+                mcpRunning={data?.mcpRunning ?? null}
               />
             </View>
           </Card>
