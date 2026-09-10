@@ -16,6 +16,7 @@ import {
   TIMELINE_RENDERED_METRICS,
   DEFAULT_METRIC_SURFACES,
   isMcpSurfaceEnabled,
+  customPillEffectiveEnabled,
 } from "../shared/resources";
 import { collectTurnTelemetry, customPillPoller, parseGitDiffShortstat, summarizeTurnTimeline } from "./resources";
 
@@ -330,5 +331,52 @@ test("metric definitions, ids, defaults, and pill types stay in sync", () => {
     pillIds,
     [...METRIC_IDS].sort(),
     "PillItemType union must match METRIC_IDS exactly",
+  );
+});
+
+test("pill render uses definition icons and labels, never hardcoded literals", () => {
+  const pillSource = fs.readFileSync(
+    path.join(__dirname, "..", "client", "pill.tsx"),
+    "utf8",
+  );
+  const body = pillSource
+    .split("function PillItemContent(")[1]
+    .split("type SettingsListener")[0];
+  const iconLiterals = [...body.matchAll(/Icon name="([A-Za-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(
+    iconLiterals,
+    [],
+    `hardcoded Icon names in PillItemContent: ${iconLiterals.join(", ")} (read def.icon instead)`,
+  );
+  const prefixLiterals = [...body.matchAll(/\{"([A-Za-z\u0394]+ )"\}/g)].map((m) => m[1]);
+  assert.deepEqual(
+    prefixLiterals,
+    [],
+    `hardcoded label prefixes in PillItemContent: ${prefixLiterals.join(", ")} (read def.shortLabel instead)`,
+  );
+  const icons = METRIC_DEFINITIONS.map((d) => d.icon);
+  assert.equal(
+    new Set(icons).size,
+    icons.length,
+    "definition icons must be unique per metric",
+  );
+  const shorts = METRIC_DEFINITIONS.filter((d) => d.shortLabel).map((d) => d.shortLabel as string);
+  assert.equal(
+    new Set(shorts).size,
+    shorts.length,
+    "definition shortLabels must be unique",
+  );
+});
+
+test("custom pill effective state follows master, overrides, then file default", () => {
+  const pill = { id: "root-disk", enabled: true };
+  assert.equal(customPillEffectiveEnabled(false, undefined, pill), false);
+  assert.equal(customPillEffectiveEnabled(false, { "root-disk": true }, pill), false);
+  assert.equal(customPillEffectiveEnabled(true, undefined, pill), true);
+  assert.equal(customPillEffectiveEnabled(true, { "root-disk": false }, pill), false);
+  assert.equal(customPillEffectiveEnabled(true, { other: false }, pill), true);
+  assert.equal(
+    customPillEffectiveEnabled(true, undefined, { id: "x", enabled: false }),
+    false,
   );
 });

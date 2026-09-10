@@ -252,6 +252,7 @@ export interface MetricDefinition {
   title: string;
   description: string;
   icon: string;
+  shortLabel?: string;
   core?: boolean;
   pillOnly?: boolean;
 }
@@ -276,6 +277,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
     title: "System Load",
     description: "1-minute host system load average",
     icon: "Activity",
+    shortLabel: "load",
     core: true,
   },
   {
@@ -328,24 +330,28 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
     title: "Host Uptime",
     description: "System running duration since boot",
     icon: "Power",
+    shortLabel: "up",
   },
   {
     id: "changes",
     title: "Git Changes",
     description: "Per-turn git insertions, deletions, and files changed",
     icon: "GitCommitHorizontal",
+    shortLabel: "Δ",
   },
   {
     id: "tokens",
     title: "Token Usage",
     description: "Live cumulative plus per-turn input/output tokens and context use",
     icon: "Coins",
+    shortLabel: "tok",
   },
   {
     id: "tools",
     title: "Tool Calls",
     description: "Per-turn tool call and error counts",
     icon: "Wrench",
+    shortLabel: "calls",
   },
 ];
 
@@ -369,6 +375,20 @@ export function isTimelineEnabled(target?: SurfaceTarget): boolean {
  * selected + known-dead source -> hidden on both surfaces; unselected -> hidden.
  * A disabled dependency is known-dead, never placeholder material.
  */
+/**
+ * Effective enabled state for one custom pill. Single decision point shared
+ * by the server filter, the settings matrix, and the composer sync.
+ */
+export function customPillEffectiveEnabled(
+  masterEnabled: boolean,
+  overrides: Record<string, boolean> | undefined,
+  pill: { id: string; enabled: boolean },
+): boolean {
+  if (!masterEnabled) return false;
+  const override = overrides?.[pill.id];
+  return override === undefined ? pill.enabled : override;
+}
+
 export function isSourceDead(
   id: MetricId,
   status: { mcpRunning?: boolean | null },

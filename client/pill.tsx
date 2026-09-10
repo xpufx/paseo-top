@@ -53,6 +53,7 @@ import {
   isProviderDependent,
   legacyFlagView,
   isMcpSurfaceEnabled,
+  customPillEffectiveEnabled,
   METRIC_DEFINITIONS,
   DEFAULT_METRIC_SURFACES,
   checkboxesFromTarget,
@@ -229,12 +230,13 @@ function PillItemContent({
 }: PillItemContentProps) {
   const { colors } = usePluginTheme();
   const { cpuColor, memColor } = getMetricColors(data, colors);
+  const def = METRIC_DEFINITIONS.find((d) => d.id === item);
 
   switch (item) {
     case "branch":
       return (
         <View style={styles.pillContainer}>
-          <Icon name="GitBranch" size={12} color={colors.accent} />
+          <Icon name={def?.icon ?? "Circle"} size={12} color={colors.accent} />
           <Text
             numberOfLines={1}
             style={[
@@ -251,7 +253,7 @@ function PillItemContent({
     case "worktree":
       return (
         <View style={styles.pillContainer}>
-          <Icon name="Folder" size={12} color={colors.accent} />
+          <Icon name={def?.icon ?? "Circle"} size={12} color={colors.accent} />
           <Text
             numberOfLines={1}
             style={[
@@ -268,7 +270,7 @@ function PillItemContent({
     case "agent_title":
       return (
         <View style={styles.pillContainer}>
-          <Icon name="Bot" size={12} color={colors.accent} />
+          <Icon name={def?.icon ?? "Circle"} size={12} color={colors.accent} />
           <Text
             numberOfLines={1}
             style={[
@@ -285,7 +287,7 @@ function PillItemContent({
     case "agent":
       return (
         <View style={styles.pillContainer}>
-          <Icon name="Cpu" size={12} color={colors.accent} />
+          <Icon name={def?.icon ?? "Circle"} size={12} color={colors.accent} />
           <Text
             numberOfLines={1}
             style={[
@@ -302,7 +304,7 @@ function PillItemContent({
     case "agent_provider":
       return (
         <View style={styles.pillContainer}>
-          <Icon name="Sparkles" size={12} color={colors.accent} />
+          <Icon name={def?.icon ?? "Circle"} size={12} color={colors.accent} />
           <Text
             numberOfLines={1}
             style={[
@@ -343,7 +345,7 @@ function PillItemContent({
     case "agent_id":
       return (
         <View style={styles.pillContainer}>
-          <Icon name="Fingerprint" size={12} color={colors.accent} />
+          <Icon name={def?.icon ?? "Circle"} size={12} color={colors.accent} />
           <Text
             numberOfLines={1}
             style={[
@@ -361,7 +363,7 @@ function PillItemContent({
       return (
         <View style={styles.pillContainer}>
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
-            <Text style={{ color: colors.foregroundMuted }}>{"load "}</Text>
+            <Text style={{ color: colors.foregroundMuted }}>{def?.shortLabel ? `${def.shortLabel} ` : ""}</Text>
             <Text style={{ color: cpuColor, fontWeight: "600" }}>
               {data?.loadAvg?.[0] !== undefined ? data.loadAvg[0].toFixed(2) : "--"}
             </Text>
@@ -373,7 +375,7 @@ function PillItemContent({
       return (
         <View style={styles.pillContainer}>
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
-            <Text style={{ color: colors.foregroundMuted }}>{"up "}</Text>
+            <Text style={{ color: colors.foregroundMuted }}>{def?.shortLabel ? `${def.shortLabel} ` : ""}</Text>
             <Text style={{ color: colors.foreground, fontWeight: "600" }}>
               {data?.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
             </Text>
@@ -422,7 +424,7 @@ function PillItemContent({
       return (
         <View style={styles.pillContainer}>
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
-            <Text style={{ color: colors.foregroundMuted }}>{"Δ "}</Text>
+            <Text style={{ color: colors.foregroundMuted }}>{def?.shortLabel ? `${def.shortLabel} ` : ""}</Text>
             <Text style={{ color: colors.foreground, fontWeight: "600" }}>
               {hasData
                 ? `+${last.gitInsertions ?? 0}/-${last.gitDeletions ?? 0}`
@@ -448,7 +450,7 @@ function PillItemContent({
       return (
         <View style={styles.pillContainer}>
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
-            <Text style={{ color: colors.foregroundMuted }}>{"tok "}</Text>
+            <Text style={{ color: colors.foregroundMuted }}>{def?.shortLabel ? `${def.shortLabel} ` : ""}</Text>
             <Text style={{ color: colors.foreground, fontWeight: "600" }}>
               {total ?? "--"}
             </Text>
@@ -462,7 +464,7 @@ function PillItemContent({
       return (
         <View style={styles.pillContainer}>
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
-            <Text style={{ color: colors.foregroundMuted }}>{"calls "}</Text>
+            <Text style={{ color: colors.foregroundMuted }}>{def?.shortLabel ? `${def.shortLabel} ` : ""}</Text>
             <Text style={{ color: colors.foreground, fontWeight: "600" }}>
               {hasData
                 ? `${last.toolCalls}${last.toolErrors ? ` (${last.toolErrors} err)` : ""}`
@@ -880,12 +882,18 @@ function MetricSurfaceMatrix({
   notifySettingsChanged,
   mcpInstalled,
   mcpRunning,
+  customPills,
+  customOverrides,
+  onCustomToggle,
 }: {
   settings: TopSettings;
   updateSettings: (updates: Partial<TopSettings>) => void;
   notifySettingsChanged: (s: TopSettings) => void;
   mcpInstalled: boolean;
   mcpRunning?: boolean | null;
+  customPills: Array<{ id: string; title: string; sourceFile?: string; enabled: boolean }>;
+  customOverrides: Record<string, boolean> | undefined;
+  onCustomToggle: (id: string, val: boolean) => void;
 }) {
   const { colors } = usePluginTheme();
   const surfaces = settings.metricSurfaces ?? DEFAULT_METRIC_SURFACES;
@@ -968,6 +976,55 @@ function MetricSurfaceMatrix({
                   disabled={disabled || timelineDisabled}
                   onValueChange={(val) => setBox("timeline", val)}
                 />
+              </View>
+            </View>
+          </View>
+        );
+      })}
+      {customPills.map((pill) => {
+        const masterOn = settings.showCustomPills ?? true;
+        const enabled = customPillEffectiveEnabled(masterOn, customOverrides, pill);
+        return (
+          <View
+            key={`custom-${pill.id}`}
+            style={{
+              borderBottomWidth: 0,
+              paddingBottom: 0,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: "700",
+                color: colors.foreground,
+                marginBottom: 2,
+              }}
+            >
+              {pill.title}
+            </Text>
+            <Text
+              style={{ fontSize: 11, color: colors.foregroundMuted, marginBottom: 8 }}
+            >
+              {pill.sourceFile
+                ? `Drop-in pill: ${pill.sourceFile}`
+                : "Drop-in pill from ~/.paseo/top/pills"}
+            </Text>
+            <View style={{ flexDirection: "row", gap: 16, paddingLeft: 4 }}>
+              <View style={{ alignItems: "flex-start", gap: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foregroundMuted }}>
+                  Pill
+                </Text>
+                <Toggle
+                  value={enabled}
+                  disabled={!masterOn}
+                  onValueChange={(val) => onCustomToggle(pill.id, val)}
+                />
+              </View>
+              <View style={{ alignItems: "flex-start", gap: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foregroundMuted }}>
+                  Timeline
+                </Text>
+                <Toggle value={false} disabled={true} onValueChange={() => {}} />
               </View>
             </View>
           </View>
@@ -1455,6 +1512,19 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                 notifySettingsChanged={notifySettingsChanged}
                 mcpInstalled={Boolean(data?.mcpInstalled)}
                 mcpRunning={data?.mcpRunning ?? null}
+                customPills={(customPillList?.pills ?? []).map((pill) => ({
+                  id: pill.id,
+                  title: pill.title,
+                  sourceFile: pill.sourceFile,
+                  enabled: pill.enabled,
+                }))}
+                customOverrides={settings.customPillEnabled}
+                onCustomToggle={(id, val) => {
+                  const next = { ...settings.customPillEnabled, [id]: val };
+                  const nextSettings = { ...settings, customPillEnabled: next };
+                  updateSettings({ customPillEnabled: next });
+                  notifySettingsChanged(nextSettings);
+                }}
               />
             </View>
           </Card>
@@ -1477,25 +1547,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                   notifySettingsChanged(s);
                 }}
               />
-              {(customPillList?.pills ?? []).map((pill) => {
-                const enabled = settings.customPillEnabled?.[pill.id] ?? pill.enabled;
-                return (
-                  <Toggle
-                    key={pill.id}
-                    label={pill.title}
-                    description={pill.sourceFile ?? "Config file in ~/.paseo/top/pills"}
-                    value={enabled}
-                    onValueChange={(val) => {
-                      const s = {
-                        ...settings,
-                        customPillEnabled: { ...settings.customPillEnabled, [pill.id]: val },
-                      };
-                      updateSettings({ customPillEnabled: s.customPillEnabled });
-                      notifySettingsChanged(s);
-                    }}
-                  />
-                );
-              })}
+
             </View>
           </Card>
 

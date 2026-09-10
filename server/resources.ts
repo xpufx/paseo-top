@@ -22,6 +22,7 @@ import {
   type CustomPillDefinition,
   type TopTimelineTelemetryData,
   type LiveUsage,
+  customPillEffectiveEnabled,
 } from "../shared/resources";
 import { PLUGIN_VERSION } from "../shared/version";
 
@@ -132,8 +133,7 @@ export async function refreshCustomPillConfigs(): Promise<void> {
     const discovered = await discoverCustomPillConfigs(CUSTOM_PILLS_DIR, log);
     const masterEnabled = settings.showCustomPills ?? true;
     const effective = discovered.map((pill) => {
-      const override = overrides[pill.id];
-      const enabled = masterEnabled && (override === undefined ? pill.enabled : override);
+      const enabled = customPillEffectiveEnabled(masterEnabled, overrides, pill);
       return enabled === pill.enabled ? pill : { ...pill, enabled };
     });
     effectiveEnabled.clear();
