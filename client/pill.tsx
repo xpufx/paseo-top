@@ -13,6 +13,7 @@ import {
 import {
   registerComposerPill,
   type ComposerPillRegistrar,
+  type PillLiveContext,
   ModalBody,
   Card,
   Button,
@@ -68,6 +69,13 @@ import {
   type SurfaceTarget,
 } from "../shared/resources";
 import { PLUGIN_VERSION } from "../shared/version";
+import {
+  buildAllLabel,
+  enabledItemsForSettings,
+  formatSegmentLabel,
+  nextCycleItem,
+  type SegmentSnapshot,
+} from "./pill-labels";
 
 const EMPTY_PARAMS = {};
 
@@ -204,6 +212,69 @@ export function getItemTab(item: PillItemType): "system" | "context" {
 }
 
 const currentCycleTabByAgent = new Map<string, ModalTab>();
+
+interface LiveSnapshot extends SegmentSnapshot {
+  workspaceDirectory?: string | null;
+}
+
+const liveSnapshots = new Map<string, LiveSnapshot>();
+let rpcInvoker: ((contract: any, input: any) => Promise<any>) | null = null;
+
+export function updateLiveSnapshot(agentId: string, partial: Partial<LiveSnapshot>) {
+  const prev = liveSnapshots.get(agentId) ?? {};
+  liveSnapshots.set(agentId, { ...prev, ...partial });
+}
+
+function fieldsForItem(item: PillItemType, workspaceDirectory?: string | null): ResourceField[] {
+  switch (item) {
+    case "cpu_ram":
+      return ["cpu", "memory"];
+    case "branch":
+      return workspaceDirectory ? ["branch"] : [];
+    case "load":
+      return ["load"];
+    case "uptime":
+      return ["uptime"];
+    case "mcp":
+      return ["mcp"];
+    default:
+      return [];
+  }
+}
+
+async function liveSnapshotFor(
+  ctx: PillLiveContext,
+  fields?: ResourceField[],
+): Promise<SegmentSnapshot> {
+  const cached = liveSnapshots.get(ctx.agentId);
+  let data = cached?.data;
+  try {
+    if (rpcInvoker) {
+      const params: Record<string, unknown> = {};
+      if (cached?.workspaceDirectory) params.directory = cached.workspaceDirectory;
+      if (fields && fields.length > 0) params.fields = fields;
+      const fresh = await rpcInvoker(getSystemResourcesRpc, params);
+      if (fresh) {
+        data = { ...(data ?? {}), ...fresh } as SystemResources;
+        updateLiveSnapshot(ctx.agentId, { data });
+      }
+    }
+  } catch {
+    // Keep cached data when the live fetch fails
+  }
+  const worktreeLocationText =
+    cached?.worktreeLocationText ??
+    (cached?.workspaceDirectory ? formatWorktreeLocation(cached.workspaceDirectory) : undefined);
+  return { data, agent: cached?.agent ?? null, agentId: ctx.agentId, worktreeLocationText };
+}
+
+function singleItemLabelResolver(item: PillItemType) {
+  return async (ctx: PillLiveContext): Promise<string | undefined> => {
+    const cached = liveSnapshots.get(ctx.agentId);
+    const snap = await liveSnapshotFor(ctx, fieldsForItem(item, cached?.workspaceDirectory));
+    return formatSegmentLabel(item, snap);
+  };
+}
 
 interface PillItemContentProps {
   item: PillItemType;
@@ -570,6 +641,16 @@ export function SingleItemPillView({
     [workspaceDirectory],
   );
 
+  useEffect(() => {
+    updateLiveSnapshot(agentId, {
+      data,
+      agent,
+      agentId,
+      workspaceDirectory,
+      worktreeLocationText,
+    });
+  }, [agentId, data, agent, workspaceDirectory, worktreeLocationText]);
+
   const targetTab = defaultTab ?? getItemTab(item);
 
   if (item === "mcp") {
@@ -736,6 +817,16 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
     () => formatWorktreeLocation(workspaceDirectory),
     [workspaceDirectory],
   );
+
+  useEffect(() => {
+    updateLiveSnapshot(agentId, {
+      data,
+      agent,
+      agentId,
+      workspaceDirectory,
+      worktreeLocationText,
+    });
+  }, [agentId, data, agent, workspaceDirectory, worktreeLocationText]);
 
   // Collect available items enabled by user settings (or fallback to cpu_ram).
   // Visibility is selector-only: components render placeholders when data is
@@ -935,7 +1026,7 @@ function MetricSurfaceMatrix({
           >
             <Text
               style={{
-                fontSize: 13,
+                fontSize: 11,
                 fontWeight: "700",
                 color: colors.foreground,
                 marginBottom: 2,
@@ -944,7 +1035,7 @@ function MetricSurfaceMatrix({
               {def.title}
             </Text>
             <Text
-              style={{ fontSize: 11, color: colors.foregroundMuted, marginBottom: 8 }}
+              style={{ fontSize: 9, color: colors.foregroundMuted, marginBottom: 8 }}
             >
               {def.pillOnly
                 ? "Live value only; snapshots would freeze it"
@@ -958,7 +1049,7 @@ function MetricSurfaceMatrix({
             </Text>
             <View style={{ flexDirection: "row", gap: 24, paddingLeft: 4 }}>
               <View style={{ alignItems: "flex-start", gap: 4 }}>
-                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foregroundMuted }}>
+                <Text style={{ fontSize: 9, fontWeight: "600", color: colors.foregroundMuted }}>
                   Pill
                 </Text>
                 <Toggle
@@ -968,7 +1059,7 @@ function MetricSurfaceMatrix({
                 />
               </View>
               <View style={{ alignItems: "flex-start", gap: 4 }}>
-                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foregroundMuted }}>
+                <Text style={{ fontSize: 9, fontWeight: "600", color: colors.foregroundMuted }}>
                   Timeline
                 </Text>
                 <Toggle
@@ -994,7 +1085,7 @@ function MetricSurfaceMatrix({
           >
             <Text
               style={{
-                fontSize: 13,
+                fontSize: 11,
                 fontWeight: "700",
                 color: colors.foreground,
                 marginBottom: 2,
@@ -1003,7 +1094,7 @@ function MetricSurfaceMatrix({
               {pill.title}
             </Text>
             <Text
-              style={{ fontSize: 11, color: colors.foregroundMuted, marginBottom: 8 }}
+              style={{ fontSize: 9, color: colors.foregroundMuted, marginBottom: 8 }}
             >
               {pill.sourceFile
                 ? `Drop-in pill: ${pill.sourceFile}`
@@ -1011,7 +1102,7 @@ function MetricSurfaceMatrix({
             </Text>
             <View style={{ flexDirection: "row", gap: 16, paddingLeft: 4 }}>
               <View style={{ alignItems: "flex-start", gap: 4 }}>
-                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foregroundMuted }}>
+                <Text style={{ fontSize: 9, fontWeight: "600", color: colors.foregroundMuted }}>
                   Pill
                 </Text>
                 <Toggle
@@ -1021,7 +1112,7 @@ function MetricSurfaceMatrix({
                 />
               </View>
               <View style={{ alignItems: "flex-start", gap: 4 }}>
-                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foregroundMuted }}>
+                <Text style={{ fontSize: 9, fontWeight: "600", color: colors.foregroundMuted }}>
                   Timeline
                 </Text>
                 <Toggle value={false} disabled={true} onValueChange={() => {}} />
@@ -1097,6 +1188,18 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
 
   const isMcpEnabled = isMcpSurfaceEnabled(settings, "pill", data?.mcpInstalled, data?.mcpRunning);
 
+  useEffect(() => {
+    updateLiveSnapshot(agentId, {
+      data,
+      agent,
+      agentId,
+      workspaceDirectory: workspace?.directory,
+      worktreeLocationText: workspace?.directory
+        ? formatWorktreeLocation(workspace.directory)
+        : undefined,
+    });
+  }, [agentId, data, agent, workspace?.directory]);
+
   const hasAnyPillEnabled =
     flags.showCpuRam ||
     flags.showBranch ||
@@ -1165,20 +1268,20 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                 value={data.cpuUsagePercent ?? 0}
                 thresholds={CPU_THRESHOLDS}
                 label="CPU Load"
-                size={82}
+                size={72}
               />
               <MetricGauge
                 value={data.memoryUsedPercent ?? 0}
                 thresholds={MEM_THRESHOLDS}
                 label="RAM Used"
-                size={82}
+                size={72}
               />
             </View>
           </Card>
 
           {/* Host Meta Card */}
           <Card variant="elevated">
-            <KeyValueGroup columns={2}>
+            <KeyValueGroup columns={1}>
               <KeyValue label="Host" value={data.hostname ?? "Unknown"} copyable />
               <KeyValue
                 label="Uptime"
@@ -1261,7 +1364,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
 
               {data.mcp ? (
                 <>
-                  <KeyValueGroup columns={2}>
+                  <KeyValueGroup columns={1}>
                     <KeyValue
                       label="Health"
                       value={`${data.mcp.healthy} healthy / ${data.mcp.total} total`}
@@ -1333,7 +1436,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                   />
                 }
               />
-              <KeyValueGroup columns={data.customPills!.length > 1 ? 2 : 1}>
+              <KeyValueGroup columns={1}>
                 {data.customPills!.map((cp) => (
                   <KeyValue
                     key={cp.id}
@@ -1361,7 +1464,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                 ) : undefined
               }
             />
-            <KeyValueGroup columns={2}>
+            <KeyValueGroup columns={1}>
               <KeyValue label="Git Branch" value={data?.branch || "Unknown"} />
               <KeyValue label="Kind" value={workspace?.kind || "Unknown"} />
             </KeyValueGroup>
@@ -1405,11 +1508,11 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
             {agentId ? (
               <KeyValue label="Agent ID" value={agentId} copyable mono />
             ) : null}
-            <KeyValueGroup columns={2}>
+            <KeyValueGroup columns={1}>
               <KeyValue label="Model" value={agent?.model || "Standard"} />
               <KeyValue label="Provider" value={agent?.provider || "Default"} />
             </KeyValueGroup>
-            <KeyValueGroup columns={2}>
+            <KeyValueGroup columns={1}>
               <KeyValue
                 label="Last Worked"
                 value={
@@ -1806,6 +1909,19 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
             }
             return currentCycleTabByAgent.get(agentId) ?? latestSettings.defaultTab;
           },
+          resolveLabel: async (ctx) => {
+            const snap = await liveSnapshotFor(ctx);
+            const items = enabledItemsForSettings(latestSettings);
+            if (items.length === 0) return "top";
+            if ((latestSettings.pillMode ?? "cycle") === "all") {
+              return buildAllLabel(items, snap);
+            }
+            const item = nextCycleItem(ctx.agentId, items);
+            if (!item) return "top";
+            currentCycleTabByAgent.set(ctx.agentId, getItemTab(item));
+            return formatSegmentLabel(item, snap);
+          },
+          refreshIntervalMs: 3000,
           renderPill: (props) => <PillView {...props} />,
           renderModal: (props) => <ResourceModal {...props} />,
         });
@@ -1986,6 +2102,8 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
             modalTitle: pillDef.modalTitle,
             modalIcon: "Activity",
             resolveDefaultPayload: () => pillDef.defaultTab,
+            resolveLabel: singleItemLabelResolver(pillDef.item),
+            refreshIntervalMs: 3000,
             renderPill: (props) => (
               <SingleItemPillView
                 item={pillDef.item}
@@ -2013,6 +2131,10 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
   const clientWithRpc = client as {
     rpc?: (contract: any, input: any) => Promise<any>;
   };
+  if (typeof clientWithRpc.rpc === "function") {
+    const rawRpc = clientWithRpc.rpc.bind(clientWithRpc);
+    rpcInvoker = (contract, input) => rawRpc(contract, input);
+  }
   if (typeof clientWithRpc.rpc === "function") {
     void clientWithRpc
       .rpc(topSettingsContract.get, {})
@@ -2064,6 +2186,19 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
             icon: pill.icon,
             compactIcon: pill.compactIcon,
             modalTitle: pill.modalTitle ?? pill.title,
+            resolveLabel: async () => {
+              try {
+                if (rpcInvoker) {
+                  const res = await rpcInvoker(getCustomPillsRpc, EMPTY_PARAMS);
+                  const found = res?.pills?.find((p: CustomPillStateOutput) => p.id === pill.id);
+                  if (found?.displayValue) return found.displayValue;
+                }
+              } catch {
+                // Keep the last pushed label on fetch errors
+              }
+              return pill.displayValue;
+            },
+            refreshIntervalMs: 5000,
             renderPill: () => <LiveCustomPillView pillId={pill.id} initial={pill} />,
             renderModal: () => (
               <LiveCustomPillModal pillId={pill.id} initial={pill} />
@@ -2116,7 +2251,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   metricHighlight: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "700",
   },
   footer: {
@@ -2130,7 +2265,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   footerText: {
-    fontSize: 10,
+    fontSize: 8,
     opacity: 0.65,
     fontFamily: "monospace",
   },
@@ -2141,7 +2276,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   errorText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "500",
   },
   tabs: {
@@ -2158,6 +2293,7 @@ const styles = StyleSheet.create({
   },
   speedRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     alignItems: "center",
   },
@@ -2170,7 +2306,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   speedChipText: {
-    fontSize: 13,
+    fontSize: 11,
   },
   allInOneContainer: {
     flexDirection: "row",
@@ -2196,23 +2332,25 @@ const styles = StyleSheet.create({
   },
   modeRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     paddingTop: 8,
     paddingBottom: 12,
   },
   modeCard: {
     flex: 1,
+    minWidth: 120,
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
     gap: 4,
   },
   modeTitle: {
-    fontSize: 13,
+    fontSize: 11,
   },
   modeDesc: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 9,
+    lineHeight: 12,
   },
   mcpList: {
     gap: 8,
@@ -2233,15 +2371,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mcpName: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "500",
   },
   mcpLatency: {
-    fontSize: 11,
+    fontSize: 9,
     fontFamily: "monospace",
   },
   mcpEmpty: {
-    fontSize: 12,
+    fontSize: 10,
     fontStyle: "italic",
     paddingVertical: 4,
   },
