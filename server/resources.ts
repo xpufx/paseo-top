@@ -512,6 +512,7 @@ export async function collectTurnTelemetry(
     gitBefore?: GitDiffStat | null;
     mcpRunning?: boolean;
     mcpInstalled?: boolean;
+    mcpStorage?: Pick<PluginStorage<McpStatusSnapshot>, "exists" | "readAsync">;
   },
 ): Promise<TopTimelineTelemetryData> {
   const metrics = getSystemMetrics();
@@ -543,9 +544,10 @@ export async function collectTurnTelemetry(
   // counts into every new timeline item. Same check as the live RPC path.
   const mcpRunning = extra?.mcpRunning ?? (await isPluginRunning("mcp-tools"));
   const mcpInstalled = extra?.mcpInstalled ?? (await isPluginInstalled("mcp-tools"));
-  if (mcpRunning && mcpStorage.exists()) {
+  const mcpSnapshotSource = extra?.mcpStorage ?? mcpStorage;
+  if (mcpRunning && mcpSnapshotSource.exists()) {
     try {
-      const snap = await mcpStorage.readAsync();
+      const snap = await mcpSnapshotSource.readAsync();
       if (snap && typeof snap.total === "number") {
         mcpTotal = snap.total;
         mcpHealthy = snap.healthy;

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
+import { PluginStorage } from "paseo-plugin-helper/server";
 import {
   topTimelineTelemetrySchema,
   TopSettingsSchema,
@@ -17,6 +18,7 @@ import {
   DEFAULT_METRIC_SURFACES,
   isMcpSurfaceEnabled,
   customPillEffectiveEnabled,
+  type McpStatusSnapshot,
 } from "../shared/resources";
 import { collectTurnTelemetry, customPillPoller, parseGitDiffShortstat, summarizeTurnTimeline } from "./resources";
 
@@ -213,6 +215,47 @@ test("collectTurnTelemetry omits MCP fields when mcp-tools is not running", asyn
   assert.equal(telemetry.mcpTotal, undefined);
   assert.equal(telemetry.mcpInstalled, false);
   topTimelineTelemetrySchema.parse(telemetry);
+});
+
+test("collectTurnTelemetry ignores a leftover snapshot file when mcp-tools is gone", async () => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "top-mcp-leftover-"));
+  try {
+    const leftover = new PluginStorage<McpStatusSnapshot>("mcp-tools", "status.json", { baseDir });
+    await leftover.writeAsync({
+      updatedAt: new Date().toISOString(),
+      total: 3,
+      healthy: 3,
+      degraded: 0,
+      down: 0,
+      servers: [{ name: "ghost", status: "healthy", latencyMs: 1 }],
+    });
+    assert.equal(leftover.exists(), true);
+
+    const gone = await collectTurnTelemetry(
+      "turn-mcp-leftover",
+      "agent-test",
+      { kind: "completed" },
+      100,
+      { mcpRunning: false, mcpInstalled: false, mcpStorage: leftover },
+    );
+    assert.equal(gone.mcpHealthy, undefined);
+    assert.equal(gone.mcpTotal, undefined);
+    assert.equal(gone.mcpInstalled, false);
+    topTimelineTelemetrySchema.parse(gone);
+
+    const live = await collectTurnTelemetry(
+      "turn-mcp-live",
+      "agent-test",
+      { kind: "completed" },
+      100,
+      { mcpRunning: true, mcpInstalled: true, mcpStorage: leftover },
+    );
+    assert.equal(live.mcpHealthy, 3);
+    assert.equal(live.mcpTotal, 3);
+    topTimelineTelemetrySchema.parse(live);
+  } finally {
+    fs.rmSync(baseDir, { recursive: true, force: true });
+  }
 });
 
 test("legacy timeline items without mcpInstalled still parse", () => {  const parsed = topTimelineTelemetrySchema.parse({
