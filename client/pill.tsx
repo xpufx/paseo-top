@@ -1921,10 +1921,20 @@ function LiveCustomPillModal({ pillId, initial }: LiveCustomPillModalProps) {
   );
 }
 
-let sidebarCleanup: (() => void) | null = null;
+// The host may mount the client contribution more than once without an
+// intervening cleanup (multi-pane, StrictMode, hot reload). Pill, surface,
+// and sidebar ids are global per plugin, so two live mounts double-register
+// every pill and a single tap fires two openers - the modal opens in both
+// locations at once. Last mount wins: mounting retires the previous mount.
+let liveContributionCleanup: (() => void) | null = null;
 
 export function contributeClient(client: ComposerPillRegistrar | PluginClientContext) {
-  if (!sidebarCleanup && "addSurface" in client && "addSidebarItem" in client) {
+  if (liveContributionCleanup) {
+    liveContributionCleanup();
+    liveContributionCleanup = null;
+  }
+  let cleanupSidebar: (() => void) | null = null;
+  if ("addSurface" in client && "addSidebarItem" in client) {
     const removeSurface = client.addSurface("paseo-top-dashboard", (props) => (
       <PluginThemeProvider
         theme={props.theme}
@@ -1939,7 +1949,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
       icon: "Activity",
       surface: "paseo-top-dashboard",
     });
-    sidebarCleanup = () => {
+    cleanupSidebar = () => {
       removeSurface();
       removeItem();
     };
@@ -2298,10 +2308,13 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
   };
   settingsListeners.add(onSettingsChanged);
 
-  return () => {
-    if (sidebarCleanup) {
-      sidebarCleanup();
-      sidebarCleanup = null;
+  let disposed = false;
+  const cleanup = () => {
+    if (disposed) return;
+    disposed = true;
+    if (cleanupSidebar) {
+      cleanupSidebar();
+      cleanupSidebar = null;
     }
     clearInterval(customPillInterval);
     settingsListeners.delete(syncPills);
@@ -2314,6 +2327,11 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
       cleanup();
     }
     activeCustomPills.clear();
+  };
+  liveContributionCleanup = cleanup;
+  return () => {
+    if (liveContributionCleanup === cleanup) liveContributionCleanup = null;
+    cleanup();
   };
 }
 
