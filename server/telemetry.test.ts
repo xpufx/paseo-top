@@ -20,7 +20,7 @@ import {
   customPillEffectiveEnabled,
   type McpStatusSnapshot,
 } from "../shared/resources";
-import { collectTurnTelemetry, countTurns, customPillPoller, parseGitDiffShortstat, summarizeTurnTimeline } from "./resources";
+import { collectTurnTelemetry, countTurns, customPillPoller, parseGitDiffShortstat, setLastLiveUsage, summarizeTurnTimeline } from "./resources";
 
 after(() => {
   customPillPoller.stop();
@@ -392,6 +392,34 @@ test("collectTurnTelemetry includes git delta and usage when provided", async ()
   assert.equal(validated.gitInsertions, 2);
   assert.equal(validated.gitFilesChanged, 1);
   assert.equal(validated.inputTokens, undefined);
+});
+
+test("collectTurnTelemetry falls back to lastLiveUsage when timeline omits tokens", async () => {
+  setLastLiveUsage({
+    inputTokens: 1234,
+    outputTokens: 567,
+    cachedInputTokens: 890,
+    contextWindowUsedTokens: 1801,
+    contextWindowMaxTokens: 128000,
+    totalCostUsd: 0.015,
+  });
+
+  const telemetry = await collectTurnTelemetry(
+    "turn-fallback",
+    "agent-fallback",
+    { kind: "completed" },
+    100,
+  );
+
+  const validated = topTimelineTelemetrySchema.parse(telemetry);
+  assert.equal(validated.inputTokens, 1234);
+  assert.equal(validated.outputTokens, 567);
+  assert.equal(validated.cachedTokens, 890);
+  assert.equal(validated.contextUsedTokens, 1801);
+  assert.equal(validated.contextMaxTokens, 128000);
+  assert.equal(validated.costUsd, 0.015);
+
+  setLastLiveUsage(null);
 });
 
 test("metric definitions, ids, defaults, and pill types stay in sync", () => {

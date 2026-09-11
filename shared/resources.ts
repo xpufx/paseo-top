@@ -137,6 +137,8 @@ export const topTimelineTelemetrySchema = z.object({
   turnCount: z.number().optional(),
   inputTokens: z.number().optional(),
   outputTokens: z.number().optional(),
+  cachedTokens: z.number().optional(),
+  cachedInputTokens: z.number().optional(),
   contextUsedTokens: z.number().optional(),
   contextMaxTokens: z.number().optional(),
   costUsd: z.number().optional(),

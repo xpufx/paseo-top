@@ -78,7 +78,10 @@ import { TopDashboardSurface } from "./surface";
 import {
   buildAllLabel,
   enabledItemsForSettings,
+  extractTokenMetrics,
+  formatCompactTokens,
   formatSegmentLabel,
+  formatTokensLabel,
   nextCycleItem,
   type SegmentSnapshot,
 } from "./pill-labels";
@@ -538,23 +541,22 @@ function PillItemContent({
     }
 
     case "tokens": {
-      const live = data?.liveUsage;
-      const liveTotal =
-        live && (live.inputTokens != null || live.outputTokens != null)
-          ? (live.inputTokens ?? 0) + (live.outputTokens ?? 0)
-          : null;
-      const last = data?.lastTurn;
-      const lastTotal =
-        last && (last.inputTokens != null || last.outputTokens != null)
-          ? (last.inputTokens ?? 0) + (last.outputTokens ?? 0)
-          : null;
-      const total = liveTotal ?? lastTotal;
+      const metrics = extractTokenMetrics({ data, agent });
+      const label = formatTokensLabel(metrics, "");
+      const isPlaceholder = !metrics;
       return (
         <View style={styles.pillContainer}>
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
-            <Text style={{ color: colors.foregroundMuted }}>{def?.shortLabel ? `${def.shortLabel} ` : ""}</Text>
-            <Text style={{ color: colors.foreground, fontWeight: "600" }}>
-              {total ?? "--"}
+            <Text style={{ color: colors.foregroundMuted }}>
+              {isPlaceholder && def?.shortLabel ? `${def.shortLabel} ` : ""}
+            </Text>
+            <Text
+              style={{
+                color: isPlaceholder ? colors.foregroundMuted : colors.foreground,
+                fontWeight: "600",
+              }}
+            >
+              {label}
             </Text>
           </Text>
         </View>
@@ -644,6 +646,7 @@ export function SingleItemPillView({
     provider: a?.provider,
     status: a?.status,
     lastActivityAt: a?.lastActivityAt,
+    lastUsage: (a as any)?.lastUsage,
   }));
 
   const neededFields = useMemo(() => {
@@ -768,6 +771,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
     provider: a?.provider,
     status: a?.status,
     lastActivityAt: a?.lastActivityAt,
+    lastUsage: (a as any)?.lastUsage,
   }));
 
   const hasAnyEnabled =
@@ -844,6 +848,15 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
     if (last && (last.inputTokens != null || last.outputTokens != null)) {
       found.push("tokens");
     }
+    const agentUsage = (agent as any)?.lastUsage;
+    if (
+      agentUsage &&
+      (agentUsage.inputTokens != null ||
+        agentUsage.outputTokens != null ||
+        agentUsage.contextWindowUsedTokens != null)
+    ) {
+      found.push("tokens");
+    }
     if (agent?.model || agent?.provider) {
       found.push("agent", "agent_provider");
     }
@@ -856,7 +869,7 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.lastTurn, data?.liveUsage, agent?.model, agent?.provider]);
+  }, [data?.lastTurn, data?.liveUsage, agent?.model, agent?.provider, (agent as any)?.lastUsage]);
 
   const worktreeLocationText = useMemo(
     () => formatWorktreeLocation(workspaceDirectory),
@@ -1219,6 +1232,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
     status: a?.status,
     cwd: a?.cwd,
     lastActivityAt: a?.lastActivityAt,
+    lastUsage: (a as any)?.lastUsage,
   }));
 
   const queryParams = useMemo(() => {
@@ -1233,6 +1247,15 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
       isOpen: true,
     },
   );
+
+  const tokenMetrics = useMemo(() => {
+    return extractTokenMetrics({ data, agent });
+  }, [data, agent]);
+
+  const contextPercent = useMemo(() => {
+    if (!tokenMetrics?.contextMaxTokens || tokenMetrics.contextMaxTokens <= 0) return null;
+    return Math.round(((tokenMetrics.contextUsedTokens ?? 0) / tokenMetrics.contextMaxTokens) * 100);
+  }, [tokenMetrics]);
 
   const isMcpEnabled = isMcpSurfaceEnabled(settings, "pill", data?.mcpInstalled, data?.mcpRunning);
 
@@ -1581,6 +1604,79 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
             {agent?.cwd ? (
               <CompactKeyValue label="Working Directory" value={agent.cwd} copyable mono />
             ) : null}
+          </Card>
+
+          {/* Token Usage & Context Window */}
+          <Card variant="elevated">
+            <CompactCardHeader
+              title="Tokens & Context Window"
+              icon="Coins"
+              value={
+                contextPercent != null ? (
+                  <CompactBadge
+                    label={`${contextPercent}% ctx`}
+                    variant={contextPercent >= 85 ? "danger" : contextPercent >= 70 ? "warning" : "success"}
+                  />
+                ) : tokenMetrics?.totalTokens != null ? (
+                  <CompactBadge
+                    label={`${formatCompactTokens(tokenMetrics.totalTokens)} tok`}
+                    variant="neutral"
+                  />
+                ) : undefined
+              }
+            />
+
+            {tokenMetrics?.contextMaxTokens != null && tokenMetrics.contextMaxTokens > 0 ? (
+              <View style={{ marginVertical: 4 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                  <Text style={[styles.compactKvLabel, { color: colors.foregroundMuted }]}>Context Utilization</Text>
+                  <Text style={[styles.compactKvValue, { color: colors.foreground, fontWeight: "600" }]}>
+                    {formatCompactTokens(tokenMetrics.contextUsedTokens ?? 0)} / {formatCompactTokens(tokenMetrics.contextMaxTokens)} ({contextPercent}%)
+                  </Text>
+                </View>
+                <ProgressBar
+                  value={contextPercent ?? 0}
+                  thresholds={{ warning: 70, danger: 85 }}
+                  height={8}
+                />
+              </View>
+            ) : tokenMetrics?.contextUsedTokens != null ? (
+              <CompactKeyValue
+                label="Context Used"
+                value={`${tokenMetrics.contextUsedTokens.toLocaleString()} (${formatCompactTokens(tokenMetrics.contextUsedTokens)})`}
+              />
+            ) : null}
+
+            <KeyValueGroup columns={1}>
+              <CompactKeyValue
+                label="Input Tokens"
+                value={tokenMetrics?.inputTokens != null ? tokenMetrics.inputTokens.toLocaleString() : "--"}
+                subValue={tokenMetrics?.inputTokens != null ? formatCompactTokens(tokenMetrics.inputTokens) : undefined}
+              />
+              <CompactKeyValue
+                label="Output Tokens"
+                value={tokenMetrics?.outputTokens != null ? tokenMetrics.outputTokens.toLocaleString() : "--"}
+                subValue={tokenMetrics?.outputTokens != null ? formatCompactTokens(tokenMetrics.outputTokens) : undefined}
+              />
+              {tokenMetrics?.cachedTokens != null && (
+                <CompactKeyValue
+                  label="Cached Tokens"
+                  value={tokenMetrics.cachedTokens.toLocaleString()}
+                  subValue={formatCompactTokens(tokenMetrics.cachedTokens)}
+                />
+              )}
+              {tokenMetrics?.costUsd != null && (
+                <CompactKeyValue
+                  label="Session / Turn Cost"
+                  value={`$${tokenMetrics.costUsd < 0.01 ? tokenMetrics.costUsd.toFixed(4) : tokenMetrics.costUsd.toFixed(2)}`}
+                />
+              )}
+            </KeyValueGroup>
+            {!tokenMetrics && (
+              <Text style={[styles.mcpEmpty, { color: colors.foregroundMuted, marginTop: 4 }]}>
+                No token usage recorded for this agent session yet
+              </Text>
+            )}
           </Card>
         </>
       )}
@@ -2171,7 +2267,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           item: "tokens",
           title: "Token Usage",
           modalTitle: "Host System Resources",
-          defaultTab: "system",
+          defaultTab: "context",
         });
       }
       if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.tools)) {

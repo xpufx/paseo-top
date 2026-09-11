@@ -461,6 +461,8 @@ export async function collectGitDiffStat(cwd: string): Promise<GitDiffStat | nul
 export interface TurnUsage {
   inputTokens?: number;
   outputTokens?: number;
+  cachedTokens?: number;
+  cachedInputTokens?: number;
   contextUsedTokens?: number;
   contextMaxTokens?: number;
   costUsd?: number;
@@ -480,14 +482,18 @@ function readUsageRecord(record: unknown): TurnUsage | undefined {
   const usage: TurnUsage = {
     inputTokens: num(r.inputTokens),
     outputTokens: num(r.outputTokens),
-    contextUsedTokens: num(r.contextUsedTokens),
+    cachedTokens: num(r.cachedTokens ?? r.cachedInputTokens),
+    cachedInputTokens: num(r.cachedInputTokens ?? r.cachedTokens),
+    contextUsedTokens: num(r.contextWindowUsedTokens ?? r.contextUsedTokens),
     contextMaxTokens: num(r.contextWindowMaxTokens ?? r.contextMaxTokens),
     costUsd: num(r.totalCostUsd ?? r.costUsd),
   };
   if (
     usage.inputTokens === undefined &&
     usage.outputTokens === undefined &&
+    usage.cachedTokens === undefined &&
     usage.contextUsedTokens === undefined &&
+    usage.contextMaxTokens === undefined &&
     usage.costUsd === undefined
   ) {
     return undefined;
@@ -543,7 +549,7 @@ export function getLastTurnTelemetry(): TopTimelineTelemetryData | null {
 
 export function setLastLiveUsage(usage: LiveUsage | null): void {
   if (usage) {
-    lastLiveUsage = usage;
+    lastLiveUsage = { ...(lastLiveUsage ?? {}), ...usage };
   }
 }
 
@@ -644,6 +650,7 @@ export async function collectTurnTelemetry(
   let turnCount: number | undefined;
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
+  let cachedTokens: number | undefined;
   let contextUsedTokens: number | undefined;
   let contextMaxTokens: number | undefined;
   let costUsd: number | undefined;
@@ -654,9 +661,30 @@ export async function collectTurnTelemetry(
     turnCount = countTurns(extra.timeline);
     inputTokens = activity.usage?.inputTokens;
     outputTokens = activity.usage?.outputTokens;
+    cachedTokens = activity.usage?.cachedTokens ?? activity.usage?.cachedInputTokens;
     contextUsedTokens = activity.usage?.contextUsedTokens;
     contextMaxTokens = activity.usage?.contextMaxTokens;
     costUsd = activity.usage?.costUsd;
+  }
+
+  // Fall back to lastLiveUsage if turn timeline activity omitted token telemetry
+  if (inputTokens === undefined && lastLiveUsage?.inputTokens !== undefined) {
+    inputTokens = lastLiveUsage.inputTokens;
+  }
+  if (outputTokens === undefined && lastLiveUsage?.outputTokens !== undefined) {
+    outputTokens = lastLiveUsage.outputTokens;
+  }
+  if (cachedTokens === undefined && lastLiveUsage?.cachedInputTokens !== undefined) {
+    cachedTokens = lastLiveUsage.cachedInputTokens;
+  }
+  if (contextUsedTokens === undefined && lastLiveUsage?.contextWindowUsedTokens !== undefined) {
+    contextUsedTokens = lastLiveUsage.contextWindowUsedTokens;
+  }
+  if (contextMaxTokens === undefined && lastLiveUsage?.contextWindowMaxTokens !== undefined) {
+    contextMaxTokens = lastLiveUsage.contextWindowMaxTokens;
+  }
+  if (costUsd === undefined && lastLiveUsage?.totalCostUsd !== undefined) {
+    costUsd = lastLiveUsage.totalCostUsd;
   }
 
   const data: TopTimelineTelemetryData = {
@@ -689,6 +717,8 @@ export async function collectTurnTelemetry(
     turnCount,
     inputTokens,
     outputTokens,
+    cachedTokens,
+    cachedInputTokens: cachedTokens,
     contextUsedTokens,
     contextMaxTokens,
     costUsd,

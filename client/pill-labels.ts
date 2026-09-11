@@ -32,9 +32,157 @@ export interface SegmentSnapshot {
     provider?: string;
     status?: string;
     lastActivityAt?: string;
+    lastUsage?: {
+      inputTokens?: number | null;
+      outputTokens?: number | null;
+      cachedInputTokens?: number | null;
+      contextWindowUsedTokens?: number | null;
+      contextWindowMaxTokens?: number | null;
+      totalCostUsd?: number | null;
+      [key: string]: any;
+    } | null;
+    [key: string]: any;
   } | null;
   agentId?: string;
   worktreeLocationText?: string;
+}
+
+export interface TokenMetrics {
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedTokens?: number;
+  totalTokens?: number;
+  contextUsedTokens?: number;
+  contextMaxTokens?: number;
+  costUsd?: number;
+}
+
+export function formatCompactTokens(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n >= 1_000_000) {
+    const val = n / 1_000_000;
+    return val >= 10 ? `${Math.round(val)}M` : `${parseFloat(val.toFixed(1))}M`;
+  }
+  if (n >= 1_000) {
+    const val = n / 1_000;
+    return val >= 10 ? `${Math.round(val)}k` : `${parseFloat(val.toFixed(1))}k`;
+  }
+  return `${Math.round(n)}`;
+}
+
+export function extractTokenMetrics(snap: {
+  data?: SystemResources;
+  agent?: {
+    lastUsage?: any;
+    [key: string]: any;
+  } | null;
+}): TokenMetrics | null {
+  const live = snap.data?.liveUsage;
+  const last = snap.data?.lastTurn;
+  const agentUsage = (snap.agent as any)?.lastUsage;
+
+  const num = (v: unknown): number | undefined =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+
+  const inputTokens =
+    num(live?.inputTokens) ??
+    num(last?.inputTokens) ??
+    num(agentUsage?.inputTokens);
+
+  const outputTokens =
+    num(live?.outputTokens) ??
+    num(last?.outputTokens) ??
+    num(agentUsage?.outputTokens);
+
+  const cachedTokens =
+    num(live?.cachedInputTokens) ??
+    num((last as any)?.cachedTokens) ??
+    num((last as any)?.cachedInputTokens) ??
+    num(agentUsage?.cachedInputTokens) ??
+    num(agentUsage?.cachedTokens);
+
+  const contextUsedTokens =
+    num(live?.contextWindowUsedTokens) ??
+    num(last?.contextUsedTokens) ??
+    num(agentUsage?.contextWindowUsedTokens) ??
+    num(agentUsage?.contextUsedTokens);
+
+  const contextMaxTokens =
+    num(live?.contextWindowMaxTokens) ??
+    num(last?.contextMaxTokens) ??
+    num(agentUsage?.contextWindowMaxTokens) ??
+    num(agentUsage?.contextMaxTokens);
+
+  const costUsd =
+    num(live?.totalCostUsd) ??
+    num(last?.costUsd) ??
+    num(agentUsage?.totalCostUsd) ??
+    num(agentUsage?.costUsd);
+
+  const totalTokens =
+    inputTokens != null || outputTokens != null
+      ? (inputTokens ?? 0) + (outputTokens ?? 0)
+      : undefined;
+
+  if (
+    inputTokens === undefined &&
+    outputTokens === undefined &&
+    cachedTokens === undefined &&
+    contextUsedTokens === undefined &&
+    contextMaxTokens === undefined &&
+    costUsd === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    cachedTokens,
+    totalTokens,
+    contextUsedTokens,
+    contextMaxTokens,
+    costUsd,
+  };
+}
+
+export function formatTokensLabel(
+  metrics: TokenMetrics | null,
+  prefix: string | undefined = "tok",
+): string {
+  if (!metrics) {
+    return prefix ? `${prefix} --` : "--";
+  }
+
+  // 1. Both context used and max: "58k/1M"
+  if (
+    metrics.contextUsedTokens != null &&
+    metrics.contextMaxTokens != null &&
+    metrics.contextMaxTokens > 0
+  ) {
+    return `${formatCompactTokens(metrics.contextUsedTokens)}/${formatCompactTokens(metrics.contextMaxTokens)}`;
+  }
+
+  // 2. Context used without max (when no total tokens or total is 0): "58k ctx"
+  if (
+    metrics.contextUsedTokens != null &&
+    metrics.contextUsedTokens > 0 &&
+    (metrics.totalTokens == null || metrics.totalTokens === 0)
+  ) {
+    return `${formatCompactTokens(metrics.contextUsedTokens)} ctx`;
+  }
+
+  // 3. Total tokens (input + output): "888 tok", "58k tok"
+  if (metrics.totalTokens != null && metrics.totalTokens > 0) {
+    return `${formatCompactTokens(metrics.totalTokens)} tok`;
+  }
+
+  // 4. Context used fallback: "58k ctx"
+  if (metrics.contextUsedTokens != null && metrics.contextUsedTokens > 0) {
+    return `${formatCompactTokens(metrics.contextUsedTokens)} ctx`;
+  }
+
+  return prefix ? `${prefix} --` : "--";
 }
 
 export function formatIdlePillLabel(
@@ -97,19 +245,8 @@ export function formatSegmentLabel(item: PillItemType, snap: SegmentSnapshot): s
       return hasData ? `${prefix}+${last.gitInsertions ?? 0}/-${last.gitDeletions ?? 0}` : `${prefix}--`;
     }
     case "tokens": {
-      const live = data?.liveUsage;
-      const liveTotal =
-        live && (live.inputTokens != null || live.outputTokens != null)
-          ? (live.inputTokens ?? 0) + (live.outputTokens ?? 0)
-          : null;
-      const last = data?.lastTurn;
-      const lastTotal =
-        last && (last.inputTokens != null || last.outputTokens != null)
-          ? (last.inputTokens ?? 0) + (last.outputTokens ?? 0)
-          : null;
-      const total = liveTotal ?? lastTotal;
-      const prefix = def?.shortLabel ? `${def.shortLabel} ` : "";
-      return total != null ? `${prefix}${total}` : `${prefix}--`;
+      const metrics = extractTokenMetrics(snap);
+      return formatTokensLabel(metrics, def?.shortLabel);
     }
     case "tools": {
       const last = data?.lastTurn;

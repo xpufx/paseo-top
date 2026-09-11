@@ -12,6 +12,7 @@ import {
   type MetricId,
   type TopTimelineTelemetryData,
 } from "../shared/resources";
+import { formatCompactTokens } from "./pill-labels";
 
 export { TIMELINE_RENDERED_METRICS };
 
@@ -43,7 +44,7 @@ export function TopTimelineTelemetryCard({
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 4,
+        marginBottom: 6,
       },
       headerLeft: {
         flexDirection: "row",
@@ -94,6 +95,86 @@ export function TopTimelineTelemetryCard({
       vitalText: {
         fontSize: 11,
         fontWeight: "500",
+      },
+      tokenSection: {
+        marginTop: 6,
+        paddingTop: 6,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        gap: 4,
+      },
+      tokenHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+      },
+      tokenHeaderLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+      },
+      tokenHeaderTitle: {
+        fontSize: 10,
+        fontWeight: "600",
+        color: theme.colors.foregroundMuted,
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+      },
+      tokenCostText: {
+        fontSize: 10,
+        fontWeight: "600",
+        color: theme.colors.foreground,
+      },
+      contextContainer: {
+        marginVertical: 2,
+        gap: 2,
+      },
+      contextLabelRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+      },
+      contextLabel: {
+        fontSize: 10,
+        color: theme.colors.foregroundMuted,
+      },
+      contextValue: {
+        fontSize: 10,
+        fontWeight: "600",
+        color: theme.colors.foreground,
+      },
+      progressBarTrack: {
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: theme.colors.surface2,
+        overflow: "hidden",
+      },
+      progressBarFill: {
+        height: "100%",
+        borderRadius: 3,
+      },
+      tokenPillsRow: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 6,
+        marginTop: 2,
+      },
+      tokenBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: theme.colors.surface2,
+        paddingHorizontal: 5,
+        paddingVertical: 1,
+        borderRadius: 4,
+      },
+      tokenBadgeLabel: {
+        fontSize: 9,
+        color: theme.colors.foregroundMuted,
+      },
+      tokenBadgeValue: {
+        fontSize: 9,
+        fontWeight: "600",
+        color: theme.colors.foreground,
       },
       errorContainer: {
         marginTop: 8,
@@ -163,6 +244,32 @@ export function TopTimelineTelemetryCard({
       return "";
     }
   }, [data.timestamp, timestamp]);
+
+  const cachedTokens = data.cachedTokens ?? (data as any)?.cachedInputTokens;
+  const totalTokens =
+    data.inputTokens != null || data.outputTokens != null
+      ? (data.inputTokens ?? 0) + (data.outputTokens ?? 0)
+      : undefined;
+
+  const contextPercent = useMemo(() => {
+    if (!data.contextMaxTokens || data.contextMaxTokens <= 0) return null;
+    return Math.round(((data.contextUsedTokens ?? 0) / data.contextMaxTokens) * 100);
+  }, [data.contextUsedTokens, data.contextMaxTokens]);
+
+  const contextBarColor = useMemo(() => {
+    if (contextPercent == null) return theme.colors.accent ?? theme.colors.foreground;
+    if (contextPercent >= 85) return theme.colors.statusDanger;
+    if (contextPercent >= 70) return theme.colors.statusWarning;
+    return theme.colors.statusSuccess;
+  }, [contextPercent, theme.colors]);
+
+  const hasTokenDetails =
+    data.inputTokens != null ||
+    data.outputTokens != null ||
+    cachedTokens != null ||
+    data.contextUsedTokens != null ||
+    data.contextMaxTokens != null ||
+    data.costUsd != null;
 
   return (
     <View style={styles.card}>
@@ -363,21 +470,19 @@ export function TopTimelineTelemetryCard({
                 styles.vitalText,
                 {
                   color:
-                    data.inputTokens != null || data.outputTokens != null
+                    totalTokens != null || data.contextUsedTokens != null
                       ? theme.colors.foreground
                       : theme.colors.foregroundMuted,
                 },
               ]}
             >
-              {data.inputTokens != null || data.outputTokens != null
-                ? `${(data.inputTokens ?? 0) + (data.outputTokens ?? 0)} tok${
-                    data.contextMaxTokens
-                      ? ` (${Math.round(
-                          ((data.contextUsedTokens ?? 0) / data.contextMaxTokens) * 100,
-                        )}% ctx)`
-                      : ""
-                  }`
-                : "tok --"}
+              {data.contextUsedTokens != null && data.contextMaxTokens
+                ? `${formatCompactTokens(data.contextUsedTokens)}/${formatCompactTokens(data.contextMaxTokens)}${contextPercent != null ? ` (${contextPercent}% ctx)` : ""}`
+                : totalTokens != null
+                  ? `${formatCompactTokens(totalTokens)} tok`
+                  : data.contextUsedTokens != null
+                    ? `${formatCompactTokens(data.contextUsedTokens)} ctx`
+                    : "tok --"}
             </Text>
           </View>
         )}
@@ -422,6 +527,72 @@ export function TopTimelineTelemetryCard({
           </View>
         )}
       </View>
+
+      {show("tokens") && hasTokenDetails && (
+        <View style={styles.tokenSection}>
+          <View style={styles.tokenHeader}>
+            <View style={styles.tokenHeaderLeft}>
+              <Icon name="Coins" size={12} color={theme.colors.foregroundMuted} />
+              <Text style={styles.tokenHeaderTitle}>Tokens & Context</Text>
+            </View>
+            {data.costUsd != null && (
+              <Text style={styles.tokenCostText}>
+                ${data.costUsd < 0.01 ? data.costUsd.toFixed(4) : data.costUsd.toFixed(2)}
+              </Text>
+            )}
+          </View>
+
+          {data.contextMaxTokens != null && data.contextMaxTokens > 0 ? (
+            <View style={styles.contextContainer}>
+              <View style={styles.contextLabelRow}>
+                <Text style={styles.contextLabel}>Context Window</Text>
+                <Text style={styles.contextValue}>
+                  {formatCompactTokens(data.contextUsedTokens ?? 0)} / {formatCompactTokens(data.contextMaxTokens)} ({contextPercent}%)
+                </Text>
+              </View>
+              <View style={styles.progressBarTrack}>
+                <View
+                  style={[
+                    styles.progressBarFill,
+                    {
+                      width: `${Math.min(100, Math.max(0, contextPercent ?? 0))}%`,
+                      backgroundColor: contextBarColor,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          ) : data.contextUsedTokens != null ? (
+            <View style={styles.contextLabelRow}>
+              <Text style={styles.contextLabel}>Context Used</Text>
+              <Text style={styles.contextValue}>
+                {formatCompactTokens(data.contextUsedTokens)} tokens
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.tokenPillsRow}>
+            {data.inputTokens != null && (
+              <View style={styles.tokenBadge}>
+                <Text style={styles.tokenBadgeLabel}>In: </Text>
+                <Text style={styles.tokenBadgeValue}>{data.inputTokens.toLocaleString()}</Text>
+              </View>
+            )}
+            {data.outputTokens != null && (
+              <View style={styles.tokenBadge}>
+                <Text style={styles.tokenBadgeLabel}>Out: </Text>
+                <Text style={styles.tokenBadgeValue}>{data.outputTokens.toLocaleString()}</Text>
+              </View>
+            )}
+            {cachedTokens != null && (
+              <View style={styles.tokenBadge}>
+                <Text style={styles.tokenBadgeLabel}>Cache: </Text>
+                <Text style={styles.tokenBadgeValue}>{cachedTokens.toLocaleString()}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
 
       {data.outcomeError && (
         <View style={styles.errorContainer}>
