@@ -192,7 +192,8 @@ export type PillItemType =
   | "mcp"
   | "changes"
   | "tokens"
-  | "tools";
+  | "tools"
+  | "turns";
 
 export type ModalTab = "system" | "context" | "settings" | "about";
 
@@ -205,6 +206,7 @@ export function getItemTab(item: PillItemType): "system" | "context" {
     case "changes":
     case "tokens":
     case "tools":
+    case "turns":
       return "system";
     case "branch":
     case "worktree":
@@ -575,6 +577,20 @@ function PillItemContent({
       );
     }
 
+    case "turns": {
+      const last = data?.lastTurn;
+      return (
+        <View style={styles.pillContainer}>
+          <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
+            <Text style={{ color: colors.foregroundMuted }}>{def?.shortLabel ? `${def.shortLabel} ` : ""}</Text>
+            <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+              {last?.turnCount != null ? `${last.turnCount}` : "--"}
+            </Text>
+          </Text>
+        </View>
+      );
+    }
+
     case "cpu_ram":
     default: {
       const ramGb =
@@ -880,6 +896,9 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
   }
   if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.tools)) {
     items.push("tools");
+  }
+  if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.turns)) {
+    items.push("turns");
   }
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -2160,6 +2179,15 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
           id: "paseo-top-tools",
           item: "tools",
           title: "Tool Calls",
+          modalTitle: "Host System Resources",
+          defaultTab: "system",
+        });
+      }
+      if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.turns)) {
+        desiredPills.push({
+          id: "paseo-top-turns",
+          item: "turns",
+          title: "Turn Count",
           modalTitle: "Host System Resources",
           defaultTab: "system",
         });

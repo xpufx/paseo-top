@@ -134,6 +134,7 @@ export const topTimelineTelemetrySchema = z.object({
   gitFilesChanged: z.number().optional(),
   toolCalls: z.number().optional(),
   toolErrors: z.number().optional(),
+  turnCount: z.number().optional(),
   inputTokens: z.number().optional(),
   outputTokens: z.number().optional(),
   contextUsedTokens: z.number().optional(),
@@ -200,6 +201,7 @@ export const MetricIdSchema = z.enum([
   "changes",
   "tokens",
   "tools",
+  "turns",
 ]);
 export type MetricId = z.infer<typeof MetricIdSchema>;
 
@@ -218,6 +220,7 @@ export const METRIC_IDS: readonly MetricId[] = [
   "changes",
   "tokens",
   "tools",
+  "turns",
 ];
 
 export const CORE_TIMELINE_METRICS: readonly MetricId[] = [
@@ -245,6 +248,7 @@ export const DEFAULT_METRIC_SURFACES: Record<MetricId, SurfaceTarget> = {
   changes: "timeline",
   tokens: "timeline",
   tools: "timeline",
+  turns: "none",
 };
 
 export interface MetricDefinition {
@@ -352,6 +356,13 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
     description: "Per-turn tool call and error counts",
     icon: "Wrench",
     shortLabel: "calls",
+  },
+  {
+    id: "turns",
+    title: "Turn Count",
+    description: "Lifetime completed turns for the active agent",
+    icon: "Repeat",
+    shortLabel: "turns",
   },
 ];
 
@@ -467,6 +478,7 @@ export const TIMELINE_RENDERED_METRICS: readonly MetricId[] = [
   "changes",
   "tokens",
   "tools",
+  "turns",
 ];
 
 export interface LegacyFlagView {
@@ -588,6 +600,7 @@ export function migrateLegacyMetricSurfaces(raw: Record<string, unknown>): Recor
     changes: false,
     tokens: false,
     tools: false,
+    turns: false,
   };
 
   const result: Record<MetricId, SurfaceTarget> = { ...DEFAULT_METRIC_SURFACES };

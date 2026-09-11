@@ -20,7 +20,7 @@ import {
   customPillEffectiveEnabled,
   type McpStatusSnapshot,
 } from "../shared/resources";
-import { collectTurnTelemetry, customPillPoller, parseGitDiffShortstat, summarizeTurnTimeline } from "./resources";
+import { collectTurnTelemetry, countTurns, customPillPoller, parseGitDiffShortstat, summarizeTurnTimeline } from "./resources";
 
 after(() => {
   customPillPoller.stop();
@@ -303,8 +303,7 @@ test("parseGitDiffShortstat parses insertions, deletions, and files", () => {
   assert.equal(parseGitDiffShortstat("nothing to commit"), null);
 });
 
-test("summarizeTurnTimeline counts tools and extracts usage", () => {
-  const activity = summarizeTurnTimeline([
+test("summarizeTurnTimeline counts tools and extracts usage", () => {  const activity = summarizeTurnTimeline([
     { type: "tool_call", name: "bash", status: "success" },
     { type: "tool_call", name: "read", status: "failed" },
     { type: "assistant_message", text: "hi" },
@@ -314,6 +313,57 @@ test("summarizeTurnTimeline counts tools and extracts usage", () => {
   assert.equal(activity.toolErrors, 1);
   assert.equal(activity.usage?.inputTokens, 100);
   assert.equal(activity.usage?.outputTokens, 50);
+});
+
+test("countTurns counts one turn per user message", () => {
+  assert.equal(
+    countTurns([
+      { type: "user_message", text: "first" },
+      { type: "assistant_message", text: "reply" },
+      { type: "tool_call", name: "bash", status: "success" },
+      { type: "user_message", text: "second" },
+      { type: "assistant_message", text: "reply" },
+    ]),
+    2,
+  );
+});
+
+test("countTurns ignores non-message items and malformed rows", () => {
+  assert.equal(
+    countTurns([
+      { type: "reasoning", text: "hmm" },
+      { type: "todo", items: [] },
+      { type: "error", message: "boom" },
+      { type: "notification", level: "info", message: "hi" },
+      null,
+      "stray",
+      42,
+      { noType: true },
+    ]),
+    0,
+  );
+  assert.equal(countTurns([]), 0);
+  assert.equal(countTurns(undefined), undefined);
+});
+
+test("collectTurnTelemetry stamps lifetime turn count from timeline", async () => {
+  const telemetry = await collectTurnTelemetry(
+    "turn-count-1",
+    "agent-test",
+    { kind: "completed" },
+    100,
+    {
+      timeline: [
+        { type: "user_message", text: "one" },
+        { type: "assistant_message", text: "uno" },
+        { type: "user_message", text: "two" },
+        { type: "assistant_message", text: "dos" },
+        { type: "user_message", text: "three" },
+      ],
+    },
+  );
+  assert.equal(telemetry.turnCount, 3);
+  topTimelineTelemetrySchema.parse(telemetry);
 });
 
 test("collectTurnTelemetry includes git delta and usage when provided", async () => {

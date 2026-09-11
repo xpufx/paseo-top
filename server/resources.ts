@@ -495,6 +495,22 @@ function readUsageRecord(record: unknown): TurnUsage | undefined {
   return usage;
 }
 
+/**
+ * Lifetime turn count for an agent: one turn per user message in the full
+ * timeline history the daemon hands us on turn_ended. All outcomes count —
+ * a failed turn still consumed context. Returns undefined when no timeline
+ * was provided so callers render a placeholder instead of a false zero.
+ */
+export function countTurns(timeline: readonly unknown[] | undefined): number | undefined {
+  if (!timeline) return undefined;
+  let count = 0;
+  for (const item of timeline) {
+    if (!item || typeof item !== "object") continue;
+    if ((item as Record<string, unknown>).type === "user_message") count++;
+  }
+  return count;
+}
+
 export function summarizeTurnTimeline(timeline: readonly unknown[]): TurnActivity {
   let toolCalls = 0;
   let toolErrors = 0;
@@ -625,6 +641,7 @@ export async function collectTurnTelemetry(
 
   let toolCalls: number | undefined;
   let toolErrors: number | undefined;
+  let turnCount: number | undefined;
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
   let contextUsedTokens: number | undefined;
@@ -634,6 +651,7 @@ export async function collectTurnTelemetry(
     const activity = summarizeTurnTimeline(extra.timeline);
     toolCalls = activity.toolCalls;
     toolErrors = activity.toolErrors;
+    turnCount = countTurns(extra.timeline);
     inputTokens = activity.usage?.inputTokens;
     outputTokens = activity.usage?.outputTokens;
     contextUsedTokens = activity.usage?.contextUsedTokens;
@@ -668,6 +686,7 @@ export async function collectTurnTelemetry(
     gitFilesChanged,
     toolCalls,
     toolErrors,
+    turnCount,
     inputTokens,
     outputTokens,
     contextUsedTokens,

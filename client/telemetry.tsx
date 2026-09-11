@@ -396,9 +396,28 @@ export function TopTimelineTelemetryCard({
                 },
               ]}
             >
-              {data.toolCalls != null
-                ? `${data.toolCalls} calls${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
-                : "calls --"}
+            {data.toolCalls != null
+              ? `${data.toolCalls} calls${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
+              : "calls --"}
+            </Text>
+          </View>
+        )}
+
+        {show("turns") && (
+          <View style={styles.vitalChip}>
+            <Icon name="Repeat" size={12} color={theme.colors.foregroundMuted} />
+            <Text
+              style={[
+                styles.vitalText,
+                {
+                  color:
+                    data.turnCount != null
+                      ? theme.colors.foreground
+                      : theme.colors.foregroundMuted,
+                },
+              ]}
+            >
+              {data.turnCount != null ? `${data.turnCount} turns` : "turns --"}
             </Text>
           </View>
         )}

@@ -21,7 +21,8 @@ export type PillItemType =
   | "mcp"
   | "changes"
   | "tokens"
-  | "tools";
+  | "tools"
+  | "turns";
 
 export interface SegmentSnapshot {
   data?: SystemResources;
@@ -118,6 +119,11 @@ export function formatSegmentLabel(item: PillItemType, snap: SegmentSnapshot): s
         ? `${prefix}${last.toolCalls}${last.toolErrors ? ` (${last.toolErrors} err)` : ""}`
         : `${prefix}--`;
     }
+    case "turns": {
+      const last = data?.lastTurn;
+      const prefix = def?.shortLabel ? `${def.shortLabel} ` : "";
+      return last?.turnCount != null ? `${prefix}${last.turnCount}` : `${prefix}--`;
+    }
     case "cpu_ram":
     default: {
       const ram =
@@ -164,6 +170,9 @@ export function enabledItemsForSettings(settings: TopSettings): PillItemType[] {
   }
   if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.tools)) {
     items.push("tools");
+  }
+  if (settings.metricSurfaces && isPillEnabled(settings.metricSurfaces.turns)) {
+    items.push("turns");
   }
   return items;
 }

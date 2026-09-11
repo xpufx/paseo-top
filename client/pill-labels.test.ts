@@ -56,6 +56,15 @@ test("multiple mode resolvers: per-pill labels differ per item", () => {
   assert.notEqual(cpu, branch);
 });
 
+test("turns label formats count and placeholder", () => {
+  assert.equal(
+    formatSegmentLabel("turns", { data: { lastTurn: { turnCount: 14 } } as never }),
+    "turns 14",
+  );
+  assert.equal(formatSegmentLabel("turns", { data: {} as never }), "turns --");
+  assert.equal(formatSegmentLabel("turns", {}), "turns --");
+});
+
 test("cycle mode resolver: advances rotation index per call", () => {
   resetCycleState();
   const items = ["cpu_ram", "branch", "load"] as const;
