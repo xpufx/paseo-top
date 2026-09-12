@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useMemo } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { usePluginSettings } from "paseo-plugin-helper/client";
+import { Collapsible, usePluginSettings } from "paseo-plugin-helper/client";
 import { formatBytes, formatUptime } from "paseo-plugin-helper/shared";
 import {
   isTimelineEnabled,
@@ -23,7 +23,6 @@ export function TopTimelineTelemetryCard({
   timestamp,
 }: PluginTimelineItemProps<TopTimelineTelemetryData>) {
   const data = item.data;
-  const [isCollapsed, setIsCollapsed] = useState(true);
   const { settings } = usePluginSettings(topSettingsContract);
   const surfaces = settings.metricSurfaces;
   const show = (id: MetricId) =>
@@ -270,34 +269,21 @@ export function TopTimelineTelemetryCard({
     data.contextMaxTokens != null ||
     data.costUsd != null;
 
-  return (
-    <View style={styles.card}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={isCollapsed ? "Expand timeline details" : "Collapse timeline details"}
-        onPress={() => setIsCollapsed((v) => !v)}
-      >
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Icon
-            name={isCollapsed ? "ChevronRight" : "ChevronDown"}
-            size={14}
-            color={theme.colors.foregroundMuted}
-          />
-          <Icon name={outcomeConfig.icon} size={14} color={outcomeConfig.color} />
-          <Text style={styles.title}>{outcomeConfig.label}</Text>
-          {data.durationMs != null && (
-            <View style={styles.durationBadge}>
-              <Text style={styles.durationText}>
-                {(data.durationMs / 1000).toFixed(1)}s
-              </Text>
-            </View>
-          )}
+  const titleNode = (
+    <View style={styles.headerLeft}>
+      <Icon name={outcomeConfig.icon} size={14} color={outcomeConfig.color} />
+      <Text style={styles.title}>{outcomeConfig.label}</Text>
+      {data.durationMs != null && (
+        <View style={styles.durationBadge}>
+          <Text style={styles.durationText}>
+            {(data.durationMs / 1000).toFixed(1)}s
+          </Text>
         </View>
-        {timeLabel !== "" && <Text style={styles.timeText}>{timeLabel}</Text>}
-      </View>
-      </Pressable>
+      )}
+    </View>
+  );
 
+  const vitalsSummary = (
       <View style={styles.vitalsRow}>
         {show("cpu_ram") && (
           <View style={styles.vitalChip}>
@@ -537,8 +523,17 @@ export function TopTimelineTelemetryCard({
           </View>
         )}
       </View>
+  );
 
-      {!isCollapsed && show("tokens") && hasTokenDetails && (
+  return (
+    <Collapsible
+      initiallyExpanded={false}
+      title={titleNode}
+      headerRight={timeLabel !== "" ? <Text style={styles.timeText}>{timeLabel}</Text> : undefined}
+      summary={vitalsSummary}
+      style={styles.card}
+    >
+      {show("tokens") && hasTokenDetails && (
         <View style={styles.tokenSection}>
           <View style={styles.tokenHeader}>
             <View style={styles.tokenHeaderLeft}>
@@ -605,14 +600,13 @@ export function TopTimelineTelemetryCard({
         </View>
       )}
 
-      {!isCollapsed && data.outcomeError && (
+      {data.outcomeError && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText} numberOfLines={2}>
             {data.outcomeError}
           </Text>
         </View>
       )}
-
-    </View>
+    </Collapsible>
   );
 }
