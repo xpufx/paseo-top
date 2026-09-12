@@ -63,8 +63,6 @@ export function TopTimelineTelemetryCard({
         justifyContent: "center",
       },
       expandedDetails: {
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
         marginTop: 6,
         paddingTop: 6,
       },
@@ -193,8 +191,14 @@ export function TopTimelineTelemetryCard({
       turnDetailsRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 4,
+        flexWrap: "wrap",
+        gap: 12,
         marginTop: 2,
+      },
+      turnDetailsItem: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
       },
       turnDetailsText: {
         fontSize: 11,
@@ -673,27 +677,29 @@ export function TopTimelineTelemetryCard({
           <Text style={styles.tokenTitle}>Turn Details</Text>
         </View>
         <View style={styles.turnDetailsRow}>
-          <Icon name="Cpu" size={12} color={theme.colors.foregroundMuted} />
-          <Text style={styles.turnDetailsText}>
-            {data.agentModel ?? "Unknown model"} ({data.agentProvider ?? "default"})
-          </Text>
+          <View style={styles.turnDetailsItem}>
+            <Icon name="Cpu" size={12} color={theme.colors.foregroundMuted} />
+            <Text style={styles.turnDetailsText}>
+              {data.agentModel ?? "Unknown model"} ({data.agentProvider ?? "default"})
+            </Text>
+          </View>
+          {data.toolCalls != null && (
+            <View style={styles.turnDetailsItem}>
+              <Icon name="Wrench" size={12} color={theme.colors.foregroundMuted} />
+              <Text style={styles.turnDetailsText}>
+                {data.toolCalls} calls{data.toolErrors ? `, ${data.toolErrors} failed` : ""}
+              </Text>
+            </View>
+          )}
+          {(data.gitInsertions != null || data.gitDeletions != null) && (
+            <View style={styles.turnDetailsItem}>
+              <Icon name="GitCommitHorizontal" size={12} color={theme.colors.foregroundMuted} />
+              <Text style={styles.turnDetailsText}>
+                +{data.gitInsertions ?? 0} -{data.gitDeletions ?? 0}
+              </Text>
+            </View>
+          )}
         </View>
-        {data.toolCalls != null && (
-          <View style={styles.turnDetailsRow}>
-            <Icon name="Wrench" size={12} color={theme.colors.foregroundMuted} />
-            <Text style={styles.turnDetailsText}>
-              {data.toolCalls} calls{data.toolErrors ? `, ${data.toolErrors} failed` : ""}
-            </Text>
-          </View>
-        )}
-        {(data.gitInsertions != null || data.gitDeletions != null) && (
-          <View style={styles.turnDetailsRow}>
-            <Icon name="GitCommitHorizontal" size={12} color={theme.colors.foregroundMuted} />
-            <Text style={styles.turnDetailsText}>
-              +{data.gitInsertions ?? 0} -{data.gitDeletions ?? 0}
-            </Text>
-          </View>
-        )}
       </View>
 
 
