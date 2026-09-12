@@ -72,20 +72,11 @@ export function TopTimelineTelemetryCard({
         fontSize: 10,
         color: theme.colors.foregroundMuted,
       },
-      footerRow: {
-        flexDirection: "row",
-        justifyContent: "flex-end",
-        marginTop: 2,
-      },
-      footerText: {
-        fontSize: 9,
-        color: theme.colors.foregroundMuted,
-        opacity: 0.7,
-      },
       vitalsRow: {
         flexDirection: "row",
         flexWrap: "wrap",
         alignItems: "center",
+        justifyContent: "space-between",
         gap: 8,
       },
       vitalChip: {
@@ -157,8 +148,15 @@ export function TopTimelineTelemetryCard({
       tokenPillsRow: {
         flexDirection: "row",
         flexWrap: "wrap",
+        alignItems: "center",
         gap: 6,
         marginTop: 2,
+      },
+      viaTopText: {
+        marginLeft: "auto",
+        fontSize: 9,
+        color: theme.colors.foregroundMuted,
+        opacity: 0.7,
       },
       tokenBadge: {
         flexDirection: "row",
@@ -602,6 +600,7 @@ export function TopTimelineTelemetryCard({
                 <Text style={styles.tokenBadgeValue}>{cachedTokens.toLocaleString()}</Text>
               </View>
             )}
+            <Text style={styles.viaTopText}>via top</Text>
           </View>
         </View>
       )}
@@ -614,11 +613,6 @@ export function TopTimelineTelemetryCard({
         </View>
       )}
 
-      {!isCollapsed && (
-      <View style={styles.footerRow}>
-        <Text style={styles.footerText}>via top</Text>
-      </View>
-      )}
     </View>
   );
 }
