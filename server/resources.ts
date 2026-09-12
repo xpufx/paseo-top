@@ -532,7 +532,9 @@ export function summarizeTurnTimeline(timeline: readonly unknown[]): TurnActivit
       if (status === "failed" || status === "error") toolErrors++;
     }
     if (type === "usage_updated" || type === "turn_completed") {
-      const found = readUsageRecord(row.usage ?? row.detail);
+      const found = readUsageRecord(
+        row.usage ?? row.detail ?? (row.detail as any)?.usage ?? (row as any).data?.usage,
+      );
       if (found) usage = { ...usage, ...found };
     }
   }
@@ -576,6 +578,7 @@ export async function collectTurnTelemetry(
     mcpRunning?: boolean;
     mcpInstalled?: boolean;
     mcpStorage?: Pick<PluginStorage<McpStatusSnapshot>, "exists" | "readAsync">;
+    liveUsage?: LiveUsage | null;
   },
 ): Promise<TopTimelineTelemetryData> {
   const metrics = getSystemMetrics();
@@ -667,24 +670,25 @@ export async function collectTurnTelemetry(
     costUsd = activity.usage?.costUsd;
   }
 
-  // Fall back to lastLiveUsage if turn timeline activity omitted token telemetry
-  if (inputTokens === undefined && lastLiveUsage?.inputTokens !== undefined) {
-    inputTokens = lastLiveUsage.inputTokens;
+  // Fall back to per-turn liveUsage, then lastLiveUsage, if timeline omitted tokens
+  const effectiveLiveUsage = extra?.liveUsage ?? lastLiveUsage;
+  if (inputTokens === undefined && effectiveLiveUsage?.inputTokens !== undefined) {
+    inputTokens = effectiveLiveUsage.inputTokens;
   }
-  if (outputTokens === undefined && lastLiveUsage?.outputTokens !== undefined) {
-    outputTokens = lastLiveUsage.outputTokens;
+  if (outputTokens === undefined && effectiveLiveUsage?.outputTokens !== undefined) {
+    outputTokens = effectiveLiveUsage.outputTokens;
   }
-  if (cachedTokens === undefined && lastLiveUsage?.cachedInputTokens !== undefined) {
-    cachedTokens = lastLiveUsage.cachedInputTokens;
+  if (cachedTokens === undefined && effectiveLiveUsage?.cachedInputTokens !== undefined) {
+    cachedTokens = effectiveLiveUsage.cachedInputTokens;
   }
-  if (contextUsedTokens === undefined && lastLiveUsage?.contextWindowUsedTokens !== undefined) {
-    contextUsedTokens = lastLiveUsage.contextWindowUsedTokens;
+  if (contextUsedTokens === undefined && effectiveLiveUsage?.contextWindowUsedTokens !== undefined) {
+    contextUsedTokens = effectiveLiveUsage.contextWindowUsedTokens;
   }
-  if (contextMaxTokens === undefined && lastLiveUsage?.contextWindowMaxTokens !== undefined) {
-    contextMaxTokens = lastLiveUsage.contextWindowMaxTokens;
+  if (contextMaxTokens === undefined && effectiveLiveUsage?.contextWindowMaxTokens !== undefined) {
+    contextMaxTokens = effectiveLiveUsage.contextWindowMaxTokens;
   }
-  if (costUsd === undefined && lastLiveUsage?.totalCostUsd !== undefined) {
-    costUsd = lastLiveUsage.totalCostUsd;
+  if (costUsd === undefined && effectiveLiveUsage?.totalCostUsd !== undefined) {
+    costUsd = effectiveLiveUsage.totalCostUsd;
   }
 
   const data: TopTimelineTelemetryData = {

@@ -84,6 +84,11 @@ export function TopTimelineTelemetryCard({
         fontWeight: "500",
         color: theme.colors.foregroundMuted,
       },
+      headerRight: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+      },
       timeText: {
         fontSize: 10,
         color: theme.colors.foregroundMuted,
@@ -169,10 +174,31 @@ export function TopTimelineTelemetryCard({
         marginTop: 2,
       },
       viaTopText: {
-        marginLeft: "auto",
-        fontSize: 9,
+        fontSize: 10,
         color: theme.colors.foregroundMuted,
-        opacity: 0.7,
+        fontStyle: "italic",
+      },
+      tokenTitle: {
+        fontSize: 10,
+        fontWeight: "600",
+        color: theme.colors.foregroundMuted,
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+      },
+      tokenUnavailableText: {
+        fontSize: 10,
+        fontStyle: "italic",
+        color: theme.colors.foregroundMuted,
+      },
+      turnDetailsRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        marginTop: 2,
+      },
+      turnDetailsText: {
+        fontSize: 11,
+        color: theme.colors.foreground,
       },
       tokenBadge: {
         flexDirection: "row",
@@ -318,7 +344,10 @@ export function TopTimelineTelemetryCard({
               </View>
             )}
           </View>
-          {timeLabel !== "" && <Text style={styles.timeText}>{timeLabel}</Text>}
+          <View style={styles.headerRight}>
+            {timeLabel !== "" && <Text style={styles.timeText}>{timeLabel}</Text>}
+            <Text style={styles.viaTopText}>via top</Text>
+          </View>
         </View>
       </Pressable>
 
@@ -565,7 +594,7 @@ export function TopTimelineTelemetryCard({
 
       {isExpanded && (
         <View style={styles.expandedDetails}>
-      {show("tokens") && hasTokenDetails && (
+      {show("tokens") && hasTokenDetails ? (
         <View style={styles.tokenSection}>
           <View style={styles.tokenHeader}>
             <View style={styles.tokenHeaderLeft}>
@@ -627,10 +656,45 @@ export function TopTimelineTelemetryCard({
                 <Text style={styles.tokenBadgeValue}>{cachedTokens.toLocaleString()}</Text>
               </View>
             )}
-            <Text style={styles.viaTopText}>via top</Text>
           </View>
         </View>
+      ) : (
+        show("tokens") && (
+          <View style={styles.tokenSection}>
+            <View style={styles.tokenHeader}>
+              <Text style={styles.tokenTitle}>Tokens & Context</Text>
+              <Text style={styles.tokenUnavailableText}>Not reported by provider</Text>
+            </View>
+          </View>
+        )
       )}
+      <View style={styles.tokenSection}>
+        <View style={styles.tokenHeader}>
+          <Text style={styles.tokenTitle}>Turn Details</Text>
+        </View>
+        <View style={styles.turnDetailsRow}>
+          <Icon name="Cpu" size={12} color={theme.colors.foregroundMuted} />
+          <Text style={styles.turnDetailsText}>
+            {data.agentModel ?? "Unknown model"} ({data.agentProvider ?? "default"})
+          </Text>
+        </View>
+        {data.toolCalls != null && (
+          <View style={styles.turnDetailsRow}>
+            <Icon name="Wrench" size={12} color={theme.colors.foregroundMuted} />
+            <Text style={styles.turnDetailsText}>
+              {data.toolCalls} calls{data.toolErrors ? `, ${data.toolErrors} failed` : ""}
+            </Text>
+          </View>
+        )}
+        {(data.gitInsertions != null || data.gitDeletions != null) && (
+          <View style={styles.turnDetailsRow}>
+            <Icon name="GitCommitHorizontal" size={12} color={theme.colors.foregroundMuted} />
+            <Text style={styles.turnDetailsText}>
+              +{data.gitInsertions ?? 0} -{data.gitDeletions ?? 0}
+            </Text>
+          </View>
+        )}
+      </View>
 
 
       {data.outcomeError && (

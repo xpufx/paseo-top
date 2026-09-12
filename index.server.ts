@@ -22,6 +22,7 @@ import {
   customPillPoller,
   collectTurnTelemetry,
   collectGitDiffStat,
+  getLastLiveUsage,
   setLastLiveUsage,
   log,
 } from "./server/resources";
@@ -117,10 +118,35 @@ export default function contribute(server: PluginServerContext) {
         agentModel = refetched?.agent?.model ?? agentModel;
         agentProvider = refetched?.agent?.provider ?? agentProvider;
         agentTitle = refetched?.agent?.title ?? agentTitle;
-        const liveUsage =
+        let liveUsage =
           (refetched?.agent?.lastUsage as LiveUsage | null | undefined) ??
           ((event.agent as any)?.lastUsage as LiveUsage | null | undefined) ??
           null;
+        const lacksTokens =
+          liveUsage?.inputTokens == null &&
+          liveUsage?.outputTokens == null &&
+          (liveUsage as any)?.contextWindowUsedTokens == null;
+        if (lacksTokens) {
+          const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+          await sleep(150);
+          try {
+            const retry1 = await context.paseo.agents.ref(event.agent.id).refresh();
+            liveUsage =
+              (retry1?.agent?.lastUsage as LiveUsage | null | undefined) ?? liveUsage;
+          } catch {}
+          const stillLacks =
+            liveUsage?.inputTokens == null &&
+            liveUsage?.outputTokens == null &&
+            (liveUsage as any)?.contextWindowUsedTokens == null;
+          if (stillLacks) {
+            await sleep(250);
+            try {
+              const retry2 = await context.paseo.agents.ref(event.agent.id).refresh();
+              liveUsage =
+                (retry2?.agent?.lastUsage as LiveUsage | null | undefined) ?? liveUsage;
+            } catch {}
+          }
+        }
         setLastLiveUsage(liveUsage);
       } catch {
         // Model, provider, and title stay at event snapshot values; the card renders placeholders
@@ -138,6 +164,7 @@ export default function contribute(server: PluginServerContext) {
           model: agentModel,
           timeline: event.timeline,
           gitBefore: gitBefore ?? null,
+          liveUsage: getLastLiveUsage(),
         },
       );
 
