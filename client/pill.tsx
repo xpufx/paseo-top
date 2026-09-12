@@ -34,6 +34,7 @@ import {
   useAutoRefreshQuery,
   usePluginSettings,
   usePluginTheme,
+  useResponsive,
   getStatusColor,
   triggerHaptic,
   type RenderModalProps,
@@ -470,7 +471,7 @@ function PillItemContent({
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
             <Text style={{ color: colors.foregroundMuted }}>{def?.shortLabel ? `${def.shortLabel} ` : ""}</Text>
             <Text style={{ color: cpuColor, fontWeight: "600" }}>
-              {data?.loadAvg?.[0] !== undefined ? data.loadAvg[0].toFixed(2) : "--"}
+              {data?.loadAvg?.[0] !== undefined ? data?.loadAvg[0].toFixed(2) : "--"}
             </Text>
           </Text>
         </View>
@@ -482,7 +483,7 @@ function PillItemContent({
           <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
             <Text style={{ color: colors.foregroundMuted }}>{def?.shortLabel ? `${def.shortLabel} ` : ""}</Text>
             <Text style={{ color: colors.foreground, fontWeight: "600" }}>
-              {data?.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
+              {data?.uptimeSeconds ? formatUptime(data?.uptimeSeconds) : "--"}
             </Text>
           </Text>
         </View>
@@ -597,10 +598,10 @@ function PillItemContent({
     default: {
       const ramGb =
         data?.memoryUsedBytes !== undefined
-          ? formatBytes(data.memoryUsedBytes, { compact: true, decimals: 1 })
+          ? formatBytes(data?.memoryUsedBytes, { compact: true, decimals: 1 })
           : "--";
       const cpuText =
-        data?.cpuUsagePercent !== undefined ? `${data.cpuUsagePercent}%` : "--";
+        data?.cpuUsagePercent !== undefined ? `${data?.cpuUsagePercent}%` : "--";
       return (
         <Text numberOfLines={1} style={[styles.pillText, isOpen && styles.pillTextActive]}>
           <Text style={{ color: cpuColor, fontWeight: "600" }}>{cpuText}</Text>
@@ -702,7 +703,7 @@ export function SingleItemPillView({
   const targetTab = defaultTab ?? getItemTab(item);
 
   if (item === "mcp") {
-    if (isLoading || !data || !data.mcpInstalled) {
+    if (isLoading || !data || !data?.mcpInstalled) {
       return null;
     }
   }
@@ -1310,18 +1311,15 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
     );
   }
 
-  if (isLoading || !data) {
-    return (
-      <ModalBody refreshing={isRefetching} onRefresh={handleRefresh}>
-        <Text style={{ color: colors.foregroundMuted, fontSize: 10 }}>Loading system metrics…</Text>
-      </ModalBody>
-    );
-  }
-
   const { cpuColor, memColor } = getMetricColors(data, colors);
+  const { isCompact } = useResponsive();
 
   return (
-    <ModalBody refreshing={isRefetching} onRefresh={handleRefresh}>
+    <ModalBody
+      refreshing={isLoading || isRefetching}
+      onRefresh={handleRefresh}
+      contentContainerStyle={!isCompact ? styles.modalContentDesktop : undefined}
+    >
       {/* Navigation Tabs */}
       <Tabs
         tabs={TABS}
@@ -1336,13 +1334,13 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
           <Card variant="elevated">
             <View style={styles.gaugeContainer}>
               <MetricGauge
-                value={data.cpuUsagePercent ?? 0}
+                value={data?.cpuUsagePercent ?? 0}
                 thresholds={CPU_THRESHOLDS}
                 label="CPU Load"
                 size={72}
               />
               <MetricGauge
-                value={data.memoryUsedPercent ?? 0}
+                value={data?.memoryUsedPercent ?? 0}
                 thresholds={MEM_THRESHOLDS}
                 label="RAM Used"
                 size={72}
@@ -1353,16 +1351,16 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
           {/* Host Meta Card */}
           <Card variant="elevated">
             <KeyValueGroup columns={1}>
-              <CompactKeyValue label="Host" value={data.hostname ?? "Unknown"} copyable />
+              <CompactKeyValue label="Host" value={data?.hostname ?? "Unknown"} copyable />
               <CompactKeyValue
                 label="Uptime"
-                value={data.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
+                value={data?.uptimeSeconds ? formatUptime(data?.uptimeSeconds) : "--"}
               />
             </KeyValueGroup>
             <CompactKeyValue
               label="Processor"
-              value={data.cpuModel ?? "--"}
-              subValue={data.cpuCores ? `(${data.cpuCores} cores)` : undefined}
+              value={data?.cpuModel ?? "--"}
+              subValue={data?.cpuCores ? `(${data?.cpuCores} cores)` : undefined}
             />
           </Card>
 
@@ -1372,20 +1370,20 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               title="CPU Details"
               value={
                 <Text style={[styles.metricHighlight, { color: cpuColor }]}>
-                  {data.cpuUsagePercent ?? 0}%
+                  {data?.cpuUsagePercent ?? 0}%
                 </Text>
               }
             />
 
             <ProgressBar
-              value={data.cpuUsagePercent ?? 0}
+              value={data?.cpuUsagePercent ?? 0}
               thresholds={CPU_THRESHOLDS}
               height={8}
             />
 
             <CompactKeyValue
               label="Load Average (1m, 5m, 15m)"
-              value={data.loadAvg ? data.loadAvg.map((n) => n.toFixed(2)).join("  ") : "--"}
+              value={data?.loadAvg ? data?.loadAvg.map((n) => n.toFixed(2)).join("  ") : "--  --  --"}
               mono
             />
           </Card>
@@ -1396,35 +1394,35 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               title="Memory Details"
               value={
                 <Text style={[styles.metricHighlight, { color: memColor }]}>
-                  {data.memoryUsedPercent ?? 0}%
+                  {data?.memoryUsedPercent ?? 0}%
                 </Text>
               }
             />
 
             <ProgressBar
-              value={data.memoryUsedPercent ?? 0}
+              value={data?.memoryUsedPercent ?? 0}
               thresholds={MEM_THRESHOLDS}
               height={8}
             />
 
             <CompactKeyValue
               label="Used / Total"
-              value={`${formatBytes(data.memoryUsedBytes ?? 0)} / ${formatBytes(data.memoryTotalBytes ?? 0)}`}
+              value={`${formatBytes(data?.memoryUsedBytes ?? 0)} / ${formatBytes(data?.memoryTotalBytes ?? 0)}`}
             />
           </Card>
 
           {/* MCP Servers Card */}
-          {Boolean(data.mcpInstalled) && (
+          {Boolean(data?.mcpInstalled) && (
             <Card variant="elevated">
               <CompactCardHeader
                 title="MCP Servers"
                 subtitle="Source: paseo-mcp-tools"
                 icon="Server"
                 value={
-                  data.mcp ? (
+                  data?.mcp ? (
                     <CompactBadge
-                      label={data.mcp.isStale ? "Stale Snapshot" : "Live"}
-                      variant={data.mcp.isStale ? "warning" : "success"}
+                      label={data?.mcp.isStale ? "Stale Snapshot" : "Live"}
+                      variant={data?.mcp.isStale ? "warning" : "success"}
                       dot
                     />
                   ) : (
@@ -1433,16 +1431,16 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                 }
               />
 
-              {data.mcp ? (
+              {data?.mcp ? (
                 <>
                   <KeyValueGroup columns={1}>
                     <CompactKeyValue
                       label="Health"
-                      value={`${data.mcp.healthy} healthy / ${data.mcp.total} total`}
+                      value={`${data?.mcp.healthy} healthy / ${data?.mcp.total} total`}
                     />
                     <CompactKeyValue
                       label="Snapshot Updated"
-                      value={formatTimeAgo(data.mcp.updatedAt)}
+                      value={formatTimeAgo(data?.mcp.updatedAt)}
                     />
                     <CompactKeyValue
                       label="Data Provider"
@@ -1450,9 +1448,9 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                     />
                   </KeyValueGroup>
 
-                  {data.mcp.servers && data.mcp.servers.length > 0 ? (
+                  {data?.mcp.servers && data?.mcp.servers.length > 0 ? (
                     <View style={styles.mcpList}>
-                      {data.mcp.servers.map((srv) => {
+                      {data?.mcp.servers.map((srv) => {
                         const badgeVariant: "success" | "warning" | "danger" | "neutral" =
                           srv.status === "healthy"
                             ? "success"
@@ -1494,7 +1492,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
           )}
 
           {/* Custom Metric Pills Card */}
-          {Boolean(data.customPills && data.customPills.length > 0) && (
+          {Boolean(data?.customPills && data?.customPills.length > 0) && (
             <Card variant="elevated">
               <CompactCardHeader
                 title="Custom Metric Pills"
@@ -1502,13 +1500,13 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
                 icon="Sliders"
                 value={
                   <CompactBadge
-                    label={`${data.customPills?.length ?? 0} active`}
+                    label={`${data?.customPills?.length ?? 0} active`}
                     variant="accent"
                   />
                 }
               />
               <KeyValueGroup columns={1}>
-                {data.customPills!.map((cp) => (
+                {(data?.customPills ?? []).map((cp) => (
                   <CompactKeyValue
                     key={cp.id}
                     label={cp.title}
@@ -1936,7 +1934,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
           extraItems={[
             {
               label: "Host Platform",
-              value: data?.platform ? `${data.platform} (${data.arch ?? "unknown"})` : "Linux",
+              value: data?.platform ? `${data?.platform} (${data?.arch ?? "unknown"})` : "Linux",
               copyable: true,
             },
             { label: "Host Name", value: data?.hostname ?? "localhost", copyable: true },
@@ -1947,11 +1945,11 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
             },
             {
               label: "Total Memory",
-              value: data?.memoryTotalBytes ? formatBytes(data.memoryTotalBytes) : "unknown",
+              value: data?.memoryTotalBytes ? formatBytes(data?.memoryTotalBytes) : "unknown",
             },
             {
               label: "Host Uptime",
-              value: data?.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "unknown",
+              value: data?.uptimeSeconds ? formatUptime(data?.uptimeSeconds) : "unknown",
             },
           ]}
         />
@@ -2460,6 +2458,10 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
 }
 
 const styles = StyleSheet.create({
+  modalContentDesktop: {
+    minWidth: 460,
+    minHeight: 460,
+  },
   pillContainer: {
     flexDirection: "row",
     alignItems: "center",
