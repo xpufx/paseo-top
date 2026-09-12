@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
+import { useAgent, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { alpha, usePluginSettings } from "paseo-plugin-helper/client";
 import { formatBytes, formatUptime } from "paseo-plugin-helper/shared";
@@ -24,6 +24,24 @@ export function TopTimelineTelemetryCard({
 }: PluginTimelineItemProps<TopTimelineTelemetryData>) {
   const data = item.data;
   const [isExpanded, setIsExpanded] = useState(false);
+  const liveUsage = useAgent(data.agentId, (a: any) => a?.lastUsage);
+  const inputTokens = data.inputTokens ?? (liveUsage as any)?.inputTokens;
+  const outputTokens = data.outputTokens ?? (liveUsage as any)?.outputTokens;
+  const cachedTokens =
+    data.cachedTokens ??
+    (data as any)?.cachedInputTokens ??
+    (liveUsage as any)?.cachedInputTokens ??
+    (liveUsage as any)?.cachedTokens;
+  const contextUsedTokens =
+    data.contextUsedTokens ??
+    (liveUsage as any)?.contextWindowUsedTokens ??
+    (liveUsage as any)?.contextUsedTokens;
+  const contextMaxTokens =
+    data.contextMaxTokens ??
+    (liveUsage as any)?.contextWindowMaxTokens ??
+    (liveUsage as any)?.contextMaxTokens;
+  const costUsd =
+    data.costUsd ?? (liveUsage as any)?.totalCostUsd ?? (liveUsage as any)?.costUsd;
   const { settings } = usePluginSettings(topSettingsContract);
   const surfaces = settings.metricSurfaces;
   const show = (id: MetricId) =>
@@ -95,12 +113,15 @@ export function TopTimelineTelemetryCard({
         flexDirection: "row",
         flexWrap: "wrap",
         alignItems: "center",
-        justifyContent: "space-between",
+        justifyContent: "flex-start",
         gap: 8,
       },
       vitalChip: {
         flexDirection: "row",
         alignItems: "center",
+        flexGrow: 1,
+        maxWidth: 110,
+        justifyContent: "center",
         gap: 4,
       },
       vitalText: {
@@ -290,16 +311,15 @@ export function TopTimelineTelemetryCard({
     }
   }, [data.timestamp, timestamp]);
 
-  const cachedTokens = data.cachedTokens ?? (data as any)?.cachedInputTokens;
   const totalTokens =
-    data.inputTokens != null || data.outputTokens != null
-      ? (data.inputTokens ?? 0) + (data.outputTokens ?? 0)
+    inputTokens != null || outputTokens != null
+      ? (inputTokens ?? 0) + (outputTokens ?? 0)
       : undefined;
 
   const contextPercent = useMemo(() => {
-    if (!data.contextMaxTokens || data.contextMaxTokens <= 0) return null;
-    return Math.round(((data.contextUsedTokens ?? 0) / data.contextMaxTokens) * 100);
-  }, [data.contextUsedTokens, data.contextMaxTokens]);
+    if (!contextMaxTokens || contextMaxTokens <= 0) return null;
+    return Math.round(((contextUsedTokens ?? 0) / contextMaxTokens) * 100);
+  }, [contextUsedTokens, contextMaxTokens]);
 
   const contextBarColor = useMemo(() => {
     if (contextPercent == null) return theme.colors.accent ?? theme.colors.foreground;
@@ -309,12 +329,12 @@ export function TopTimelineTelemetryCard({
   }, [contextPercent, theme.colors]);
 
   const hasTokenDetails =
-    data.inputTokens != null ||
-    data.outputTokens != null ||
+    inputTokens != null ||
+    outputTokens != null ||
     cachedTokens != null ||
-    data.contextUsedTokens != null ||
-    data.contextMaxTokens != null ||
-    data.costUsd != null;
+    contextUsedTokens != null ||
+    contextMaxTokens != null ||
+    costUsd != null;
 
   return (
     <View style={styles.card}>
@@ -538,18 +558,18 @@ export function TopTimelineTelemetryCard({
                 styles.vitalText,
                 {
                   color:
-                    totalTokens != null || data.contextUsedTokens != null
+                    totalTokens != null || contextUsedTokens != null
                       ? theme.colors.foreground
                       : theme.colors.foregroundMuted,
                 },
               ]}
             >
-              {data.contextUsedTokens != null && data.contextMaxTokens
-                ? `${formatCompactTokens(data.contextUsedTokens)}/${formatCompactTokens(data.contextMaxTokens)}${contextPercent != null ? ` (${contextPercent}% ctx)` : ""}`
+              {contextUsedTokens != null && contextMaxTokens
+                ? `${formatCompactTokens(contextUsedTokens)}/${formatCompactTokens(contextMaxTokens)}${contextPercent != null ? ` (${contextPercent}% ctx)` : ""}`
                 : totalTokens != null
                   ? `${formatCompactTokens(totalTokens)} tok`
-                  : data.contextUsedTokens != null
-                    ? `${formatCompactTokens(data.contextUsedTokens)} ctx`
+                  : contextUsedTokens != null
+                    ? `${formatCompactTokens(contextUsedTokens)} ctx`
                     : "tok --"}
             </Text>
           </View>
@@ -605,19 +625,19 @@ export function TopTimelineTelemetryCard({
               <Icon name="Coins" size={12} color={theme.colors.foregroundMuted} />
               <Text style={styles.tokenHeaderTitle}>Tokens & Context</Text>
             </View>
-            {data.costUsd != null && (
+            {costUsd != null && (
               <Text style={styles.tokenCostText}>
-                ${data.costUsd < 0.01 ? data.costUsd.toFixed(4) : data.costUsd.toFixed(2)}
+                ${costUsd < 0.01 ? costUsd.toFixed(4) : costUsd.toFixed(2)}
               </Text>
             )}
           </View>
 
-          {data.contextMaxTokens != null && data.contextMaxTokens > 0 ? (
+          {contextMaxTokens != null && contextMaxTokens > 0 ? (
             <View style={styles.contextContainer}>
               <View style={styles.contextLabelRow}>
                 <Text style={styles.contextLabel}>Context Window</Text>
                 <Text style={styles.contextValue}>
-                  {formatCompactTokens(data.contextUsedTokens ?? 0)} / {formatCompactTokens(data.contextMaxTokens)} ({contextPercent}%)
+                  {formatCompactTokens(contextUsedTokens ?? 0)} / {formatCompactTokens(contextMaxTokens)} ({contextPercent}%)
                 </Text>
               </View>
               <View style={styles.progressBarTrack}>
@@ -632,26 +652,26 @@ export function TopTimelineTelemetryCard({
                 />
               </View>
             </View>
-          ) : data.contextUsedTokens != null ? (
+          ) : contextUsedTokens != null ? (
             <View style={styles.contextLabelRow}>
               <Text style={styles.contextLabel}>Context Used</Text>
               <Text style={styles.contextValue}>
-                {formatCompactTokens(data.contextUsedTokens)} tokens
+                {formatCompactTokens(contextUsedTokens)} tokens
               </Text>
             </View>
           ) : null}
 
           <View style={styles.tokenPillsRow}>
-            {data.inputTokens != null && (
+            {inputTokens != null && (
               <View style={styles.tokenBadge}>
                 <Text style={styles.tokenBadgeLabel}>In: </Text>
-                <Text style={styles.tokenBadgeValue}>{data.inputTokens.toLocaleString()}</Text>
+                <Text style={styles.tokenBadgeValue}>{inputTokens.toLocaleString()}</Text>
               </View>
             )}
-            {data.outputTokens != null && (
+            {outputTokens != null && (
               <View style={styles.tokenBadge}>
                 <Text style={styles.tokenBadgeLabel}>Out: </Text>
-                <Text style={styles.tokenBadgeValue}>{data.outputTokens.toLocaleString()}</Text>
+                <Text style={styles.tokenBadgeValue}>{outputTokens.toLocaleString()}</Text>
               </View>
             )}
             {cachedTokens != null && (
