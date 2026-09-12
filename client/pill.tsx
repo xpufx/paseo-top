@@ -250,6 +250,7 @@ function CompactBadge(props: BadgeProps) {
 
 interface LiveSnapshot extends SegmentSnapshot {
   workspaceDirectory?: string | null;
+  updatedAt?: number;
 }
 
 const liveSnapshots = new Map<string, LiveSnapshot>();
@@ -257,7 +258,7 @@ let rpcInvoker: ((contract: any, input: any) => Promise<any>) | null = null;
 
 export function updateLiveSnapshot(agentId: string, partial: Partial<LiveSnapshot>) {
   const prev = liveSnapshots.get(agentId) ?? {};
-  liveSnapshots.set(agentId, { ...prev, ...partial });
+  liveSnapshots.set(agentId, { ...prev, ...partial, updatedAt: Date.now() });
 }
 
 function fieldsForItem(item: PillItemType, workspaceDirectory?: string | null): ResourceField[] {
@@ -277,18 +278,40 @@ function fieldsForItem(item: PillItemType, workspaceDirectory?: string | null): 
   }
 }
 
+const LIVE_SNAPSHOT_TTL_MS = 2500;
+const liveSnapshotInflight = new Map<string, Promise<SystemResources | null>>();
+
 async function liveSnapshotFor(
   ctx: PillLiveContext,
   fields?: ResourceField[],
 ): Promise<SegmentSnapshot> {
   const cached = liveSnapshots.get(ctx.agentId);
   let data = cached?.data;
+  const cacheAge = cached?.updatedAt ? Date.now() - cached.updatedAt : Infinity;
   try {
     if (rpcInvoker) {
       const params: Record<string, unknown> = {};
       if (cached?.workspaceDirectory) params.directory = cached.workspaceDirectory;
       if (fields && fields.length > 0) params.fields = fields;
-      const fresh = await rpcInvoker(getSystemResourcesRpc, params);
+      const cacheKey = `${ctx.agentId}::${JSON.stringify(params)}`;
+      let inflight = liveSnapshotInflight.get(cacheKey);
+      if (!inflight && cacheAge > LIVE_SNAPSHOT_TTL_MS) {
+        inflight = (async () => {
+          try {
+            return (await rpcInvoker!(getSystemResourcesRpc, params)) as SystemResources | null;
+          } catch {
+            return null;
+          } finally {
+            liveSnapshotInflight.delete(cacheKey);
+          }
+        })();
+        liveSnapshotInflight.set(cacheKey, inflight);
+      }
+      const fresh = inflight
+        ? await inflight
+        : cacheAge <= LIVE_SNAPSHOT_TTL_MS
+          ? null
+          : null;
       if (fresh) {
         data = { ...(data ?? {}), ...fresh } as SystemResources;
         updateLiveSnapshot(ctx.agentId, { data });
@@ -681,8 +704,9 @@ export function SingleItemPillView({
     queryParams,
     {
       enabled: shouldPoll,
-      refetchInterval: shouldPoll ? 3000 : false,
-    },
+      refetchInterval: shouldPoll ? 5000 : false,
+      staleTime: 2500,
+    } as any,
   );
 
   const worktreeLocationText = useMemo(
@@ -833,8 +857,9 @@ function PillView({ isOpen, open, workspaceId, agentId }: RenderPillProps<ModalT
     queryParams,
     {
       enabled: shouldPoll,
-      refetchInterval: shouldPoll ? 3000 : false,
-    },
+      refetchInterval: shouldPoll ? 5000 : false,
+      staleTime: 2500,
+    } as any,
   );
 
   const isMcpEnabled = isMcpSurfaceEnabled(settings, "pill", data?.mcpInstalled, data?.mcpRunning);
@@ -1737,6 +1762,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               <Toggle
                 label="Show Composer Pill"
                 description="Hide the composer pill entirely; the dashboard stays available from the sidebar"
+                style={{ width: "100%", alignSelf: "stretch" }}
                 value={settings.showComposerPill ?? true}
                 onValueChange={(val) => {
                   const next = { ...settings, showComposerPill: val };
@@ -1797,6 +1823,7 @@ function ResourceModal({ theme, workspaceId, agentId, initialTab, payload }: Res
               <Toggle
                 label="Show Custom Metric Pills"
                 description="Display pills defined in ~/.paseo/top/pills as standalone composer pills"
+                style={{ width: "100%", alignSelf: "stretch" }}
                 labelStyle={styles.compactToggleLabel}
                 value={settings.showCustomPills ?? true}
                 onValueChange={(val) => {
@@ -2149,12 +2176,14 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         title: string;
         modalTitle: string;
         defaultTab: "system" | "context";
+        icon: string;
       }[] = [];
 
       if (effectiveCpu) {
         desiredPills.push({
           id: "paseo-top-cpu",
           item: "cpu_ram",
+          icon: "Cpu",
           title: "CPU & RAM",
           modalTitle: "Host System Resources",
           defaultTab: "system",
@@ -2164,6 +2193,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-branch",
           item: "branch",
+          icon: "GitBranch",
           title: "Git Branch",
           modalTitle: "Host System Resources",
           defaultTab: "context",
@@ -2173,6 +2203,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-worktree",
           item: "worktree",
+          icon: "FolderGit2",
           title: "Worktree",
           modalTitle: "Host System Resources",
           defaultTab: "context",
@@ -2182,6 +2213,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-agent-title",
           item: "agent_title",
+          icon: "Bot",
           title: "Agent Tab",
           modalTitle: "Host System Resources",
           defaultTab: "context",
@@ -2191,6 +2223,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-agent",
           item: "agent",
+          icon: "Bot",
           title: "Agent Model",
           modalTitle: "Host System Resources",
           defaultTab: "context",
@@ -2200,6 +2233,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-agent-provider",
           item: "agent_provider",
+          icon: "Sparkles",
           title: "Provider",
           modalTitle: "Host System Resources",
           defaultTab: "context",
@@ -2209,6 +2243,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-agent-activity",
           item: "agent_activity",
+          icon: "Activity",
           title: "Activity",
           modalTitle: "Host System Resources",
           defaultTab: "context",
@@ -2218,6 +2253,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-agent-id",
           item: "agent_id",
+          icon: "Hash",
           title: "Agent ID",
           modalTitle: "Host System Resources",
           defaultTab: "context",
@@ -2227,6 +2263,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-load",
           item: "load",
+          icon: "Gauge",
           title: "Load",
           modalTitle: "Host System Resources",
           defaultTab: "system",
@@ -2236,6 +2273,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-uptime",
           item: "uptime",
+          icon: "Clock",
           title: "Uptime",
           modalTitle: "Host System Resources",
           defaultTab: "system",
@@ -2245,6 +2283,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-mcp",
           item: "mcp",
+          icon: "Server",
           title: "MCP Health",
           modalTitle: "Host System Resources",
           defaultTab: "system",
@@ -2254,6 +2293,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-changes",
           item: "changes",
+          icon: "GitCompare",
           title: "Git Changes",
           modalTitle: "Host System Resources",
           defaultTab: "system",
@@ -2263,6 +2303,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-tokens",
           item: "tokens",
+          icon: "Coins",
           title: "Token Usage",
           modalTitle: "Host System Resources",
           defaultTab: "context",
@@ -2272,6 +2313,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-tools",
           item: "tools",
+          icon: "Sigma",
           title: "Tool Calls",
           modalTitle: "Host System Resources",
           defaultTab: "system",
@@ -2281,6 +2323,7 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
         desiredPills.push({
           id: "paseo-top-turns",
           item: "turns",
+          icon: "RotateCw",
           title: "Turn Count",
           modalTitle: "Host System Resources",
           defaultTab: "system",
@@ -2304,10 +2347,11 @@ export function contributeClient(client: ComposerPillRegistrar | PluginClientCon
             id: pillDef.id,
             title: pillDef.title,
             modalTitle: pillDef.modalTitle,
-            modalIcon: "Activity",
+            icon: pillDef.icon,
+            modalIcon: pillDef.icon,
             resolveDefaultPayload: () => pillDef.defaultTab,
             resolveLabel: singleItemLabelResolver(pillDef.item),
-            refreshIntervalMs: 3000,
+            refreshIntervalMs: 5000,
             renderPill: (props) => (
               <SingleItemPillView
                 item={pillDef.item}
@@ -2532,6 +2576,7 @@ const styles = StyleSheet.create({
   },
   settingsToggles: {
     gap: 8,
+    width: "100%",
   },
   speedRow: {
     flexDirection: "row",
