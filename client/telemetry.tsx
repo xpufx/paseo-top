@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { usePluginSettings } from "paseo-plugin-helper/client";
@@ -23,6 +23,7 @@ export function TopTimelineTelemetryCard({
   timestamp,
 }: PluginTimelineItemProps<TopTimelineTelemetryData>) {
   const data = item.data;
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const { settings } = usePluginSettings(topSettingsContract);
   const surfaces = settings.metricSurfaces;
   const show = (id: MetricId) =>
@@ -273,8 +274,18 @@ export function TopTimelineTelemetryCard({
 
   return (
     <View style={styles.card}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={isCollapsed ? "Expand timeline details" : "Collapse timeline details"}
+        onPress={() => setIsCollapsed((v) => !v)}
+      >
       <View style={styles.header}>
         <View style={styles.headerLeft}>
+          <Icon
+            name={isCollapsed ? "ChevronRight" : "ChevronDown"}
+            size={14}
+            color={theme.colors.foregroundMuted}
+          />
           <Icon name={outcomeConfig.icon} size={14} color={outcomeConfig.color} />
           <Text style={styles.title}>{outcomeConfig.label}</Text>
           {data.durationMs != null && (
@@ -287,6 +298,7 @@ export function TopTimelineTelemetryCard({
         </View>
         {timeLabel !== "" && <Text style={styles.timeText}>{timeLabel}</Text>}
       </View>
+      </Pressable>
 
       <View style={styles.vitalsRow}>
         {show("cpu_ram") && (
@@ -528,7 +540,7 @@ export function TopTimelineTelemetryCard({
         )}
       </View>
 
-      {show("tokens") && hasTokenDetails && (
+      {!isCollapsed && show("tokens") && hasTokenDetails && (
         <View style={styles.tokenSection}>
           <View style={styles.tokenHeader}>
             <View style={styles.tokenHeaderLeft}>
@@ -594,7 +606,7 @@ export function TopTimelineTelemetryCard({
         </View>
       )}
 
-      {data.outcomeError && (
+      {!isCollapsed && data.outcomeError && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText} numberOfLines={2}>
             {data.outcomeError}
@@ -602,9 +614,11 @@ export function TopTimelineTelemetryCard({
         </View>
       )}
 
+      {!isCollapsed && (
       <View style={styles.footerRow}>
         <Text style={styles.footerText}>via top</Text>
       </View>
+      )}
     </View>
   );
 }
