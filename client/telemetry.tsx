@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useAgent, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { alpha, usePluginSettings } from "paseo-plugin-helper/client";
-import { formatBytes, formatUptime } from "paseo-plugin-helper/shared";
+import { formatBytes, formatUptime, truncatePath } from "paseo-plugin-helper/shared";
 import {
   isTimelineEnabled,
   isMcpSurfaceEnabled,
@@ -385,7 +385,7 @@ export function TopTimelineTelemetryCard({
         {show("cpu_ram") && (
           <View style={styles.vitalChip}>
             <Icon name="Cpu" size={12} color={theme.colors.foregroundMuted} />
-            <Text style={[styles.vitalText, { color: cpuColor }]}>
+            <Text numberOfLines={1} style={[styles.vitalText, { color: cpuColor }]}>
               CPU {data.cpuPercent}%
             </Text>
           </View>
@@ -394,7 +394,7 @@ export function TopTimelineTelemetryCard({
         {show("cpu_ram") && (
           <View style={styles.vitalChip}>
             <Icon name="Database" size={12} color={theme.colors.foregroundMuted} />
-            <Text style={[styles.vitalText, { color: memColor }]}>
+            <Text numberOfLines={1} style={[styles.vitalText, { color: memColor }]}>
               RAM {formatBytes(data.memUsedBytes)} ({data.memPercent}%)
             </Text>
           </View>
@@ -403,7 +403,7 @@ export function TopTimelineTelemetryCard({
         {show("load") && (
           <View style={styles.vitalChip}>
             <Icon name="Activity" size={12} color={theme.colors.foregroundMuted} />
-            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+            <Text numberOfLines={1} style={[styles.vitalText, { color: theme.colors.foreground }]}>
               Load {data.loadAvg1m.toFixed(2)}
             </Text>
           </View>
@@ -412,7 +412,7 @@ export function TopTimelineTelemetryCard({
         {showMcp && (
           <View style={styles.vitalChip}>
             <Icon name="Server" size={12} color={theme.colors.foregroundMuted} />
-            <Text
+            <Text numberOfLines={1}
               style={[
                 styles.vitalText,
                 {
@@ -435,7 +435,7 @@ export function TopTimelineTelemetryCard({
         {show("agent_id") && (
           <View style={styles.vitalChip}>
             <Icon name="Fingerprint" size={12} color={theme.colors.foregroundMuted} />
-            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+            <Text numberOfLines={1} style={[styles.vitalText, { color: theme.colors.foreground }]}>
               {data.agentId && data.agentId.length > 7 ? data.agentId.slice(0, 7) : (data.agentId ?? "--")}
             </Text>
           </View>
@@ -444,7 +444,7 @@ export function TopTimelineTelemetryCard({
         {show("agent") && (
           <View style={styles.vitalChip}>
             <Icon name="Bot" size={12} color={theme.colors.foregroundMuted} />
-            <Text
+            <Text numberOfLines={1}
               style={[
                 styles.vitalText,
                 {
@@ -462,7 +462,7 @@ export function TopTimelineTelemetryCard({
         {show("agent_provider") && (
           <View style={styles.vitalChip}>
             <Icon name="Globe" size={12} color={theme.colors.foregroundMuted} />
-            <Text
+            <Text numberOfLines={1}
               style={[
                 styles.vitalText,
                 {
@@ -480,7 +480,7 @@ export function TopTimelineTelemetryCard({
         {show("agent_title") && (
           <View style={styles.vitalChip}>
             <Icon name="Tag" size={12} color={theme.colors.foregroundMuted} />
-            <Text
+            <Text numberOfLines={1}
               style={[
                 styles.vitalText,
                 {
@@ -498,7 +498,7 @@ export function TopTimelineTelemetryCard({
         {show("branch") && (
           <View style={styles.vitalChip}>
             <Icon name="GitBranch" size={12} color={theme.colors.foregroundMuted} />
-            <Text
+            <Text numberOfLines={1}
               style={[
                 styles.vitalText,
                 {
@@ -516,7 +516,7 @@ export function TopTimelineTelemetryCard({
         {show("worktree") && (
           <View style={styles.vitalChip}>
             <Icon name="Folder" size={12} color={theme.colors.foregroundMuted} />
-            <Text
+            <Text numberOfLines={1}
               style={[
                 styles.vitalText,
                 {
@@ -526,7 +526,7 @@ export function TopTimelineTelemetryCard({
                 },
               ]}
             >
-              {data.worktree ?? "worktree --"}
+              {data.worktree ? truncatePath(data.worktree, 20) : "worktree --"}
             </Text>
           </View>
         )}
@@ -534,7 +534,7 @@ export function TopTimelineTelemetryCard({
         {show("uptime") && (
           <View style={styles.vitalChip}>
             <Icon name="Clock" size={12} color={theme.colors.foregroundMuted} />
-            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+            <Text numberOfLines={1} style={[styles.vitalText, { color: theme.colors.foreground }]}>
               {data.uptimeSeconds ? formatUptime(data.uptimeSeconds) : "--"}
             </Text>
           </View>
@@ -547,7 +547,7 @@ export function TopTimelineTelemetryCard({
               size={12}
               color={theme.colors.foregroundMuted}
             />
-            <Text style={[styles.vitalText, { color: theme.colors.foreground }]}>
+            <Text numberOfLines={1} style={[styles.vitalText, { color: theme.colors.foreground }]}>
               {(data.gitFilesChanged ?? 0) > 0
                 ? `±${data.gitFilesChanged} files +${data.gitInsertions ?? 0}/-${data.gitDeletions ?? 0}`
                 : "No changes"}
@@ -558,7 +558,7 @@ export function TopTimelineTelemetryCard({
         {show("tokens") && (
           <View style={styles.vitalChip}>
             <Icon name="Coins" size={12} color={theme.colors.foregroundMuted} />
-            <Text
+            <Text numberOfLines={1}
               style={[
                 styles.vitalText,
                 {
@@ -583,7 +583,7 @@ export function TopTimelineTelemetryCard({
         {show("tools") && (
           <View style={styles.vitalChip}>
             <Icon name="Wrench" size={12} color={theme.colors.foregroundMuted} />
-            <Text
+            <Text numberOfLines={1}
               style={[
                 styles.vitalText,
                 {
@@ -595,8 +595,8 @@ export function TopTimelineTelemetryCard({
               ]}
             >
             {data.toolCalls != null
-              ? `${data.toolCalls} calls${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
-              : "calls --"}
+              ? `Σ ${data.toolCalls} calls${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
+              : "Σ tools --"}
             </Text>
           </View>
         )}
@@ -604,7 +604,7 @@ export function TopTimelineTelemetryCard({
         {show("turns") && (
           <View style={styles.vitalChip}>
             <Icon name="Repeat" size={12} color={theme.colors.foregroundMuted} />
-            <Text
+            <Text numberOfLines={1}
               style={[
                 styles.vitalText,
                 {
@@ -756,7 +756,7 @@ export function TopTimelineTelemetryCard({
             <View style={styles.turnDetailsItem}>
               <Icon name="Wrench" size={12} color={theme.colors.foregroundMuted} />
               <Text style={styles.turnDetailsText}>
-                {data.toolCalls} calls{data.toolErrors ? `, ${data.toolErrors} failed` : ""}
+                Σ {data.toolCalls} calls{data.toolErrors ? `, ${data.toolErrors} failed` : ""}
               </Text>
             </View>
           )}
