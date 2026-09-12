@@ -582,7 +582,7 @@ export function TopTimelineTelemetryCard({
 
         {show("tools") && (
           <View style={styles.vitalChip}>
-            <Icon name="Wrench" size={12} color={theme.colors.foregroundMuted} />
+            <Icon name="Sigma" size={12} color={theme.colors.foregroundMuted} />
             <Text numberOfLines={1}
               style={[
                 styles.vitalText,
@@ -595,8 +595,8 @@ export function TopTimelineTelemetryCard({
               ]}
             >
             {data.toolCalls != null
-              ? `Σ ${data.toolCalls} calls${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
-              : "Σ tools --"}
+              ? `${data.toolCalls} calls${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
+              : "tools --"}
             </Text>
           </View>
         )}
@@ -754,9 +754,9 @@ export function TopTimelineTelemetryCard({
           </View>
           {data.toolCalls != null && (
             <View style={styles.turnDetailsItem}>
-              <Icon name="Wrench" size={12} color={theme.colors.foregroundMuted} />
+              <Icon name="Sigma" size={12} color={theme.colors.foregroundMuted} />
               <Text style={styles.turnDetailsText}>
-                Σ {data.toolCalls} calls{data.toolErrors ? `, ${data.toolErrors} failed` : ""}
+                {data.toolCalls} calls{data.toolErrors ? `, ${data.toolErrors} failed` : ""}
               </Text>
             </View>
           )}
