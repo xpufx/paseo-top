@@ -1,8 +1,8 @@
-import React, { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { Collapsible, usePluginSettings } from "paseo-plugin-helper/client";
+import { alpha, usePluginSettings } from "paseo-plugin-helper/client";
 import { formatBytes, formatUptime } from "paseo-plugin-helper/shared";
 import {
   isTimelineEnabled,
@@ -23,6 +23,7 @@ export function TopTimelineTelemetryCard({
   timestamp,
 }: PluginTimelineItemProps<TopTimelineTelemetryData>) {
   const data = item.data;
+  const [isExpanded, setIsExpanded] = useState(false);
   const { settings } = usePluginSettings(topSettingsContract);
   const surfaces = settings.metricSurfaces;
   const show = (id: MetricId) =>
@@ -50,6 +51,22 @@ export function TopTimelineTelemetryCard({
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
+      },
+      chevronBadge: {
+        width: 20,
+        height: 20,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: alpha(theme.colors.accent, 0.25),
+        backgroundColor: alpha(theme.colors.accent, 0.12),
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      expandedDetails: {
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        marginTop: 6,
+        paddingTop: 6,
       },
       title: {
         fontSize: 12,
@@ -269,22 +286,44 @@ export function TopTimelineTelemetryCard({
     data.contextMaxTokens != null ||
     data.costUsd != null;
 
-  const titleNode = (
-    <View style={styles.headerLeft}>
-      <Icon name={outcomeConfig.icon} size={14} color={outcomeConfig.color} />
-      <Text style={styles.title}>{outcomeConfig.label}</Text>
-      {data.durationMs != null && (
-        <View style={styles.durationBadge}>
-          <Text style={styles.durationText}>
-            {(data.durationMs / 1000).toFixed(1)}s
-          </Text>
+  return (
+    <View style={styles.card}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={isExpanded ? "Collapse timeline details" : "Expand timeline details"}
+        onPress={() => setIsExpanded((v) => !v)}
+        style={({ pressed }) => ({
+          cursor: "pointer",
+          backgroundColor: pressed ? theme.colors.surface2 : "transparent",
+          padding: 4,
+          borderRadius: 6,
+        })}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={styles.chevronBadge}>
+              <Icon
+                name={isExpanded ? "ChevronDown" : "ChevronRight"}
+                size={14}
+                color={theme.colors.foregroundMuted}
+              />
+            </View>
+            <Icon name={outcomeConfig.icon} size={14} color={outcomeConfig.color} />
+            <Text style={styles.title}>{outcomeConfig.label}</Text>
+            {data.durationMs != null && (
+              <View style={styles.durationBadge}>
+                <Text style={styles.durationText}>
+                  {(data.durationMs / 1000).toFixed(1)}s
+                </Text>
+              </View>
+            )}
+          </View>
+          {timeLabel !== "" && <Text style={styles.timeText}>{timeLabel}</Text>}
         </View>
-      )}
-    </View>
-  );
+      </Pressable>
 
-  const vitalsSummary = (
       <View style={styles.vitalsRow}>
+
         {show("cpu_ram") && (
           <View style={styles.vitalChip}>
             <Icon name="Cpu" size={12} color={theme.colors.foregroundMuted} />
@@ -523,16 +562,9 @@ export function TopTimelineTelemetryCard({
           </View>
         )}
       </View>
-  );
 
-  return (
-    <Collapsible
-      initiallyExpanded={false}
-      title={titleNode}
-      headerRight={timeLabel !== "" ? <Text style={styles.timeText}>{timeLabel}</Text> : undefined}
-      summary={vitalsSummary}
-      style={styles.card}
-    >
+      {isExpanded && (
+        <View style={styles.expandedDetails}>
       {show("tokens") && hasTokenDetails && (
         <View style={styles.tokenSection}>
           <View style={styles.tokenHeader}>
@@ -600,6 +632,7 @@ export function TopTimelineTelemetryCard({
         </View>
       )}
 
+
       {data.outcomeError && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText} numberOfLines={2}>
@@ -607,6 +640,8 @@ export function TopTimelineTelemetryCard({
           </Text>
         </View>
       )}
-    </Collapsible>
+        </View>
+      )}
+    </View>
   );
 }
