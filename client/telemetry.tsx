@@ -583,21 +583,21 @@ export function TopTimelineTelemetryCard({
         {show("tools") && (
           <View style={styles.vitalChip}>
             <Icon name="Sigma" size={12} color={theme.colors.foregroundMuted} />
-            <Text numberOfLines={1}
-              style={[
-                styles.vitalText,
-                {
-                  color:
-                    data.toolCalls != null
-                      ? theme.colors.foreground
-                      : theme.colors.foregroundMuted,
-                },
-              ]}
-            >
-            {data.toolCalls != null
-              ? `${data.toolCalls} calls${data.toolErrors ? ` (${data.toolErrors} err)` : ""}`
-              : "tools --"}
-            </Text>
+            {data.toolCalls != null ? (
+              <Text numberOfLines={1} style={styles.vitalText}>
+                <Text style={{ color: theme.colors.foreground }}>{data.toolCalls}</Text>
+                {data.toolErrors ? (
+                  <>
+                    <Text style={{ color: theme.colors.foregroundMuted }}>/</Text>
+                    <Text style={{ color: theme.colors.statusDanger }}>{data.toolErrors}</Text>
+                  </>
+                ) : null}
+              </Text>
+            ) : (
+              <Text numberOfLines={1} style={[styles.vitalText, { color: theme.colors.foregroundMuted }]}>
+                tools --
+              </Text>
+            )}
           </View>
         )}
 
@@ -756,7 +756,13 @@ export function TopTimelineTelemetryCard({
             <View style={styles.turnDetailsItem}>
               <Icon name="Sigma" size={12} color={theme.colors.foregroundMuted} />
               <Text style={styles.turnDetailsText}>
-                {data.toolCalls} calls{data.toolErrors ? `, ${data.toolErrors} failed` : ""}
+                {data.toolCalls} calls
+                {data.toolErrors ? (
+                  <>
+                    {", "}
+                    <Text style={{ color: theme.colors.statusDanger }}>{data.toolErrors} failed</Text>
+                  </>
+                ) : null}
               </Text>
             </View>
           )}
