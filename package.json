@@ -18,6 +18,6 @@
     "zod": "^4.4.3"
   },
   "dependencies": {
-    "paseo-plugin-helper": "file:../../../../../../tmp/paseo-plugin-helper-0.4.0-beta.10.tgz"
+    "paseo-plugin-helper": "file:../../../../../../tmp/paseo-plugin-helper-0.4.0-beta.11.tgz"
   }
 }
