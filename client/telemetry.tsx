@@ -166,6 +166,12 @@ export function TopTimelineTelemetryCard({
         justifyContent: "space-between",
         alignItems: "center",
       },
+      contextLabelGroup: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        flexShrink: 1,
+      },
       contextLabel: {
         fontSize: 10,
         color: theme.colors.foregroundMuted,
@@ -190,7 +196,6 @@ export function TopTimelineTelemetryCard({
         flexWrap: "wrap",
         alignItems: "center",
         gap: 6,
-        marginTop: 2,
       },
       viaTopText: {
         fontSize: 10,
@@ -635,7 +640,29 @@ export function TopTimelineTelemetryCard({
           {contextMaxTokens != null && contextMaxTokens > 0 ? (
             <View style={styles.contextContainer}>
               <View style={styles.contextLabelRow}>
-                <Text style={styles.contextLabel}>Context Window</Text>
+                <View style={styles.contextLabelGroup}>
+                  <Text style={styles.contextLabel}>Context Window</Text>
+                  <View style={styles.tokenPillsRow}>
+                    {inputTokens != null && (
+                      <View style={styles.tokenBadge}>
+                        <Text style={styles.tokenBadgeLabel}>In: </Text>
+                        <Text style={styles.tokenBadgeValue}>{inputTokens.toLocaleString()}</Text>
+                      </View>
+                    )}
+                    {outputTokens != null && (
+                      <View style={styles.tokenBadge}>
+                        <Text style={styles.tokenBadgeLabel}>Out: </Text>
+                        <Text style={styles.tokenBadgeValue}>{outputTokens.toLocaleString()}</Text>
+                      </View>
+                    )}
+                    {cachedTokens != null && (
+                      <View style={styles.tokenBadge}>
+                        <Text style={styles.tokenBadgeLabel}>Cache: </Text>
+                        <Text style={styles.tokenBadgeValue}>{cachedTokens.toLocaleString()}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
                 <Text style={styles.contextValue}>
                   {formatCompactTokens(contextUsedTokens ?? 0)} / {formatCompactTokens(contextMaxTokens)} ({contextPercent}%)
                 </Text>
@@ -654,33 +681,55 @@ export function TopTimelineTelemetryCard({
             </View>
           ) : contextUsedTokens != null ? (
             <View style={styles.contextLabelRow}>
-              <Text style={styles.contextLabel}>Context Used</Text>
+              <View style={styles.contextLabelGroup}>
+                <Text style={styles.contextLabel}>Context Used</Text>
+                <View style={styles.tokenPillsRow}>
+                  {inputTokens != null && (
+                    <View style={styles.tokenBadge}>
+                      <Text style={styles.tokenBadgeLabel}>In: </Text>
+                      <Text style={styles.tokenBadgeValue}>{inputTokens.toLocaleString()}</Text>
+                    </View>
+                  )}
+                  {outputTokens != null && (
+                    <View style={styles.tokenBadge}>
+                      <Text style={styles.tokenBadgeLabel}>Out: </Text>
+                      <Text style={styles.tokenBadgeValue}>{outputTokens.toLocaleString()}</Text>
+                    </View>
+                  )}
+                  {cachedTokens != null && (
+                    <View style={styles.tokenBadge}>
+                      <Text style={styles.tokenBadgeLabel}>Cache: </Text>
+                      <Text style={styles.tokenBadgeValue}>{cachedTokens.toLocaleString()}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
               <Text style={styles.contextValue}>
                 {formatCompactTokens(contextUsedTokens)} tokens
               </Text>
             </View>
-          ) : null}
-
-          <View style={styles.tokenPillsRow}>
-            {inputTokens != null && (
-              <View style={styles.tokenBadge}>
-                <Text style={styles.tokenBadgeLabel}>In: </Text>
-                <Text style={styles.tokenBadgeValue}>{inputTokens.toLocaleString()}</Text>
-              </View>
-            )}
-            {outputTokens != null && (
-              <View style={styles.tokenBadge}>
-                <Text style={styles.tokenBadgeLabel}>Out: </Text>
-                <Text style={styles.tokenBadgeValue}>{outputTokens.toLocaleString()}</Text>
-              </View>
-            )}
-            {cachedTokens != null && (
-              <View style={styles.tokenBadge}>
-                <Text style={styles.tokenBadgeLabel}>Cache: </Text>
-                <Text style={styles.tokenBadgeValue}>{cachedTokens.toLocaleString()}</Text>
-              </View>
-            )}
-          </View>
+          ) : (
+            <View style={styles.tokenPillsRow}>
+              {inputTokens != null && (
+                <View style={styles.tokenBadge}>
+                  <Text style={styles.tokenBadgeLabel}>In: </Text>
+                  <Text style={styles.tokenBadgeValue}>{inputTokens.toLocaleString()}</Text>
+                </View>
+              )}
+              {outputTokens != null && (
+                <View style={styles.tokenBadge}>
+                  <Text style={styles.tokenBadgeLabel}>Out: </Text>
+                  <Text style={styles.tokenBadgeValue}>{outputTokens.toLocaleString()}</Text>
+                </View>
+              )}
+              {cachedTokens != null && (
+                <View style={styles.tokenBadge}>
+                  <Text style={styles.tokenBadgeLabel}>Cache: </Text>
+                  <Text style={styles.tokenBadgeValue}>{cachedTokens.toLocaleString()}</Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       ) : (
         show("tokens") && (
